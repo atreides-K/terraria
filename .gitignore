@@ -1,0 +1,40 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+env/
+venv/
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+*.iml
+target/
+
+# Node
+node_modules/
+dist/
+
+# IDEs/editors
+.vscode/
+.idea/
+*.swp
+
+# Build
+build/
+out/
