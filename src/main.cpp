@@ -11,6 +11,8 @@
 #include <cstring>
 
 #include "BufferUtils.h"
+#include "Pipeline.h"
+#include "Mesh.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -117,88 +119,6 @@ void Init() {
   instance.WaitAny(f2, UINT64_MAX);
 }
 
-// const char shaderCode[] = R"(
-//     // // This struct MUST match the memory layout of your C++ struct/matrix
-//     // struct MVP_Matrix {
-//     //     matrix : mat4x4f
-//     // };
-
-//     // This tells the shader to expect a uniform buffer at slot 0
-//     // of the resource binding group 0.
-//     @group(0) @binding(0) var<uniform> mvp: MVP_Matrix;
-
-//     struct VertexInput{
-//       @location(0) position : vec3f
-//     };
-
-//     @vertex fn vertexMain(input:VertexInput) ->
-//       @builtin(position) vec4f {
-//         // Apply the transformation matrix to the vertex position
-//         return vec4f(input.position, 1.0);
-//     }
-
-//     @fragment fn fragmentMain() -> @location(0) vec4f {
-//         return vec4f(1, 0, 0, 1);
-//     }
-// )";
-const char shaderCode[] = R"(
-    
-    
-
-    struct VertexInput{
-      @location(0) position : vec3f
-    };
-    @vertex fn vertexMain(input:VertexInput) ->
-      @builtin(position) vec4f {
-        return vec4f(input.position, 1.0);
-    }
-    @fragment fn fragmentMain() -> @location(0) vec4f {
-      return vec4f(0.3, 0.8, 0.4, 1.0); 
-    }
-)";
-
-void CreateRenderPipeline() {
-  wgpu::ShaderSourceWGSL wgsl{{.code = shaderCode}};
-
-  wgpu::ShaderModuleDescriptor shaderModuleDescriptor{.nextInChain = &wgsl};
-  wgpu::ShaderModule shaderModule =
-      device.CreateShaderModule(&shaderModuleDescriptor);
-  
-  wgpu::VertexAttribute vertexAttrib{
-    .format = wgpu::VertexFormat::Float32x3,
-    .offset = 0,
-    .shaderLocation = 0
-  };
-  wgpu::VertexBufferLayout vertexLayout{
-    .arrayStride = sizeof(Vertex),
-    .attributeCount = 1,
-    .attributes = &vertexAttrib
-  };
-
-  wgpu::VertexState vertexState{
-      .module = shaderModule,
-      .entryPoint = "vertexMain",
-      .bufferCount = 1,
-      .buffers = &vertexLayout};
-    
-  wgpu::ColorTargetState colorTargetState{.format = format};
-    
-  wgpu::FragmentState fragmentState{
-      .module = shaderModule, 
-      .targetCount = 1, 
-      .targets = &colorTargetState
-    };
-  wgpu::PrimitiveState primitiveState{
-    .topology = wgpu::PrimitiveTopology::TriangleStrip};
-  wgpu::RenderPipelineDescriptor descriptor{.vertex = vertexState,
-    .primitive = primitiveState,
-    .fragment = &fragmentState
-                                          };
-  pipeline = device.CreateRenderPipeline(&descriptor);
-}
-
-
-
 void Render() {
   wgpu::SurfaceTexture surfaceTexture;
   surface.GetCurrentTexture(&surfaceTexture);
@@ -223,7 +143,8 @@ void Render() {
 
 void InitGraphics() {
   ConfigureSurface();
-  CreateRenderPipeline();
+  Mesh(device, plane);
+  pipeline=Pipeline(device,format).getPipeline();
   vertexBuffer = BufferUtils::createVertexBuffer(device, plane);
   // uniformBinding = BufferUtils::createUniformBinding(device,plane);
 }

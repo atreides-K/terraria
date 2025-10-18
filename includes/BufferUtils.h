@@ -32,4 +32,6 @@ namespace BufferUtils {
         const wgpu::Device& device,
         const std::vector<Vertex>& vertices
         );
+    
 }  
+

@@ -16,6 +16,8 @@ set(APP_SOURCES
     src/main.cpp
     src/Camera.cpp
     src/BufferUtils.cpp
+    src/Mesh.cpp
+    src/Pipeline.cpp
 )
 add_executable(app ${APP_SOURCES})
 
