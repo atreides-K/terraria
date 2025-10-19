@@ -28,9 +28,9 @@ namespace BufferUtils {
         const std::vector<Vertex>& vertices
         );
 
-    UniformBinding createUniformBinding(
+    wgpu::Buffer createUniformBuffer(
         const wgpu::Device& device,
-        const std::vector<Vertex>& vertices
+         uint64_t size
         );
     
 }  

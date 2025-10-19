@@ -18,49 +18,21 @@ namespace BufferUtils{
         return buffer;
     }
 
-    
-    // UniformBinding createUniformBinding(
-    //     const wgpu::Device& device,
-    //     const std::vector<Vertex>& vertices
-    // ) {
-    //     UniformBinding binding; // Create an instance of our return struct
 
-    //     // 1. Create the Bind Group Layout (defines the "shape")
-    //     wgpu::BindGroupLayoutEntry bindingLayoutEntry = {
-    //         .binding = 0, // Matches @binding(0) in the shader
-    //         .visibility = wgpu::ShaderStage::Vertex,
-    //         .buffer = { .type = wgpu::BufferBindingType::Uniform }
-    //     };
+    wgpu::Buffer createUniformBuffer(
+        const wgpu::Device& device,
+         uint64_t size
+    ) {
+        wgpu::Buffer buffer; // Create an instance of our return struct
 
-    //     wgpu::BindGroupLayoutDescriptor bindGroupLayoutDesc{
-    //         .entryCount = 1,
-    //         .entries = &bindingLayoutEntry
-    //     };
-    //     binding.bindGroupLayout = device.CreateBindGroupLayout(&bindGroupLayoutDesc);
-        
+        // Create the Uniform Buffer
+        wgpu::BufferDescriptor uniformBuffDesc{
+            .usage = wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst,
+            .size =  size,
+        };
+        buffer = device.CreateBuffer(&uniformBuffDesc);
 
-    //     // 2. Create the Uniform Buffer
-    //     wgpu::BufferDescriptor uniformBuffDesc{
-    //         .usage = wgpu::BufferUsage::Uniform | wgpu::BufferUsage::CopyDst,
-    //         .size = sizeof(Uniforms)
-    //     binding.buffer = device.CreateBuffer(&uniformBuffDesc);
+        return buffer;
+    }
 
-
-    //     // 3. Create the Bind Group (links the buffer to the layout)
-    //     wgpu::BindGroupEntry bindGroupEntry{
-    //         .binding = 0,
-    //         .buffer = binding.buffer,
-    //         .size = sizeof(Uniforms)
-    //     };
-
-    //     wgpu::BindGroupDescriptor bindGroupDesc{
-    //         .layout = binding.bindGroupLayout,
-    //         .entryCount = 1,
-    //         .entries = &bindGroupEntry
-    //     };
-    //     binding.bindGroup = device.CreateBindGroup(&bindGroupDesc);
-
-    //     return binding;
-    // }
-// }
 }

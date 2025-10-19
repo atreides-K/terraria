@@ -1,49 +1,49 @@
 #include "Pipeline.h"
 
 const char shaderCode[] = R"(
+    // This struct must match the data you send from the CPU
+    struct CameraUniforms {
+        view_projection_matrix: mat4x4<f32>,
+    };
+
+    // Tell the shader where to find this uniform data
+    @group(0) @binding(0)
+    var<uniform> camera: CameraUniforms;
+
     struct VertexInput{
       @location(0) position : vec3f
     };
+
     @vertex fn vertexMain(input:VertexInput) ->
       @builtin(position) vec4f {
-        return vec4f(input.position, 1.0);
+        // Use the matrix to transform the vertex position
+        return camera.view_projection_matrix * vec4f(input.position, 1.0);
     }
+
     @fragment fn fragmentMain() -> @location(0) vec4f {
       return vec4f(0.3, 0.8, 0.4, 1.0); 
     }
 )";
 
-Pipeline::Pipeline(const wgpu::Device& device,
-const wgpu::TextureFormat& surfaceFormat
-){
-    wgpu::ShaderSourceWGSL wgsl{{.code = shaderCode}};
 
-    
+
+Pipeline::Pipeline(const wgpu::Device& device,
+ const PipelineConfig& config
+){
+
+    VertexPipelineLayoutData layoutData;
+
+    wgpu::ShaderSourceWGSL wgsl{{.code = shaderCode}};
     wgpu::ShaderModuleDescriptor shaderModuleDescriptor{.nextInChain = &wgsl};
     wgpu::ShaderModule shaderModule =
         device.CreateShaderModule(&shaderModuleDescriptor);
     
 
-    wgpu::VertexAttribute vertexAttribute{
-        .format=wgpu::VertexFormat::Float32x3,
-        .offset=0,
-        .shaderLocation=0
-    };
+    // creates the layout
+    wgpu::VertexState vertexState=createVertexPipelineLayout(shaderModule,layoutData);
 
-    wgpu::VertexBufferLayout vertexLayout{
-        .arrayStride=sizeof(Vertex),
-        .attributeCount=1,
-        .attributes=&vertexAttribute
-    };
 
-    wgpu::VertexState vertexState{
-        .module = shaderModule,
-        .entryPoint = "vertexMain",
-        .bufferCount = 1,
-        .buffers = &vertexLayout
-    };
-
-    wgpu::ColorTargetState colorTargetState{.format = surfaceFormat}; // Use the passed-in format
+    wgpu::ColorTargetState colorTargetState{.format = config.surfaceFormat}; // Use the passed-in format
     
     wgpu::FragmentState fragmentState{
         .module = shaderModule, 
@@ -52,12 +52,13 @@ const wgpu::TextureFormat& surfaceFormat
     };
 
     wgpu::PrimitiveState primitiveState{
-        .topology = wgpu::PrimitiveTopology::TriangleStrip
+        .topology = config.topology
     };
 
 
 
     wgpu::RenderPipelineDescriptor descriptor{
+        .layout = config.layout,
         .vertex = vertexState,
         .primitive = primitiveState,
         .fragment = &fragmentState
@@ -66,6 +67,31 @@ const wgpu::TextureFormat& surfaceFormat
 
 }
 
+wgpu::VertexState Pipeline::createVertexPipelineLayout(const wgpu::ShaderModule& shaderModule, VertexPipelineLayoutData& layoutData) {
+
+    layoutData.vertexAttributes[0] = {
+        .format = wgpu::VertexFormat::Float32x3,
+        .offset = 0,
+        .shaderLocation = 0
+    };
+
+    layoutData.vertexBufferLayout = {
+        .arrayStride = sizeof(Vertex),
+        .attributeCount = 1,
+        .attributes = layoutData.vertexAttributes
+    };
+
+    wgpu::VertexState vertexState{
+        .module = shaderModule,
+        .entryPoint = "vertexMain",
+        .bufferCount = 1,
+        .buffers = &layoutData.vertexBufferLayout
+    };
+
+    return vertexState;     
+}
+
 wgpu::RenderPipeline Pipeline::getPipeline() const{
     return m_pipeline;
+     
 }

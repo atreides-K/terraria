@@ -46,10 +46,10 @@ public:
     glm::mat4 getViewMatrix();
 
     // Processes input received from any keyboard-like input system.
-    void processKeyboard(CameraMovement direction, float deltaTime);
+    void ProcessKeyboard(CameraMovement direction, float deltaTime);
 
     // Processes input received from a mouse input system.
-    void processMouseMovement(float xoffset, float yoffset, bool constrainPitch = true);
+    void ProcessMouseMovement(float xoffset, float yoffset, bool constrainPitch = true);
 
 private:
     // Calculates the front vector from the Camera's (updated) Euler Angles

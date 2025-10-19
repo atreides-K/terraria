@@ -2,7 +2,8 @@
 
 #include <GLFW/glfw3.h>
 #if defined(__EMSCRIPTEN__)
-#include <emscripten/emscripten.h>
+  // #include <emscripten/emscripten.h>
+  #include <emscripten/html5.h>
 #endif
 #include <dawn/webgpu_cpp_print.h>
 #include <webgpu/webgpu_cpp.h>
@@ -30,7 +31,10 @@ const uint32_t kHeight = 800;
 
 
 // Camera 
+#include <map>
+#include <string>
 
+std::map<std::string, bool> keyStates;
 Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
 
 
@@ -123,6 +127,19 @@ void Render() {
   wgpu::SurfaceTexture surfaceTexture;
   surface.GetCurrentTexture(&surfaceTexture);
 
+  // 1. Ask the camera class to compute the final view matrix from its current state.
+  glm::mat4 view = camera.getViewMatrix(); 
+
+  // 2. Create the projection matrix.
+  glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)kWidth / (float)kHeight, 0.1f, 100.0f);
+
+  // 3. Combine them. THIS is the data the GPU needs.
+  glm::mat4 viewProjMatrix = projection * view;
+
+  // 4. Send that single matrix to the uniform buffer.
+  device.GetQueue().WriteBuffer(uniformBuffer, 0, &viewProjMatrix, sizeof(glm::mat4));
+
+
   wgpu::RenderPassColorAttachment attachment{
       .view = surfaceTexture.texture.CreateView(),
       .loadOp = wgpu::LoadOp::Clear,
@@ -133,6 +150,10 @@ void Render() {
 
   wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
   wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderpass);
+   pass.SetBindGroup(0, uniformBindGroup);
+
+
+  
   pass.SetPipeline(pipeline);
   pass.SetVertexBuffer(0, vertexBuffer, 0, sizeof(Vertex) * plane.size());
   pass.Draw(4);
@@ -143,11 +164,110 @@ void Render() {
 
 void InitGraphics() {
   ConfigureSurface();
-  Mesh(device, plane);
-  pipeline=Pipeline(device,format).getPipeline();
+  // Mesh(device, plane);
+  // LAYOUT SETUP
+  wgpu::BindGroupLayoutEntry bglEntry{};
+  bglEntry.binding = 0;
+  bglEntry.visibility = wgpu::ShaderStage::Vertex;
+  bglEntry.buffer.type = wgpu::BufferBindingType::Uniform;
+  wgpu::BindGroupLayoutDescriptor bglDesc{};
+  bglDesc.entryCount = 1;
+  bglDesc.entries = &bglEntry;
+  wgpu::BindGroupLayout cameraBindGroupLayout = device.CreateBindGroupLayout(&bglDesc);
+
+  // B. Create a master layout for the pipeline that includes this new "port"
+  wgpu::PipelineLayoutDescriptor layoutDesc{};
+  layoutDesc.bindGroupLayoutCount = 1;
+  layoutDesc.bindGroupLayouts = &cameraBindGroupLayout;
+  wgpu::PipelineLayout CameraPipelineLayout = device.CreatePipelineLayout(&layoutDesc);
+
+
+  PipelineConfig MeshConfig{};
+  MeshConfig.surfaceFormat = format;
+  MeshConfig.layout = CameraPipelineLayout;
+  pipeline=Pipeline(device,MeshConfig).getPipeline();
+
+
+  // BUFFER SETUP
   vertexBuffer = BufferUtils::createVertexBuffer(device, plane);
-  // uniformBinding = BufferUtils::createUniformBinding(device,plane);
+  uniformBuffer = BufferUtils::createUniformBuffer(device, sizeof(glm::mat4));
+
+  
+  // BIND GROUP SETUP
+  wgpu::BindGroupEntry bgEntry{};
+  bgEntry.binding = 0; // Corresponds to @binding(0) in shader
+  bgEntry.buffer = uniformBuffer;
+  bgEntry.size = sizeof(glm::mat4);
+
+  wgpu::BindGroupDescriptor bgDesc{};
+  bgDesc.layout = cameraBindGroupLayout; // The "contract" this bind group follows
+  bgDesc.entryCount = 1;
+  bgDesc.entries = &bgEntry;
+  uniformBindGroup = device.CreateBindGroup(&bgDesc);
+
 }
+
+
+
+void processInput(GLFWwindow *window) {
+#if defined(__EMSCRIPTEN__)
+    // Web version: Read from our state map.
+    // Note: We check for both lowercase and uppercase to be safe.
+    if (keyStates["w"] || keyStates["W"])
+        camera.ProcessKeyboard(CameraMovement::FORWARD, deltaTime);
+    if (keyStates["s"] || keyStates["S"])
+        camera.ProcessKeyboard(CameraMovement::BACKWARD, deltaTime);
+    if (keyStates["a"] || keyStates["A"])
+        camera.ProcessKeyboard(CameraMovement::LEFT, deltaTime);
+    if (keyStates["d"] || keyStates["D"])
+        camera.ProcessKeyboard(CameraMovement::RIGHT, deltaTime);
+#else
+    // Native desktop version: Use polling with glfwGetKey.
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+        camera.ProcessKeyboard(CameraMovement::FORWARD, deltaTime);
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+        camera.ProcessKeyboard(CameraMovement::BACKWARD, deltaTime);
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+        camera.ProcessKeyboard(CameraMovement::LEFT, deltaTime);
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+        camera.ProcessKeyboard(CameraMovement::RIGHT, deltaTime);
+#endif
+}
+// This function will be called by Emscripten whenever a key is pressed down.
+EM_BOOL keydown_callback(int eventType, const EmscriptenKeyboardEvent *keyEvent, void *userData) {
+    // The keyEvent->key field gives us a string like "w", "s", "Shift", etc.
+    // We store that this key is now pressed down.
+    keyStates[keyEvent->key] = true;
+
+    // Return true to "consume" the event and prevent the browser from also handling it
+    // (e.g., scrolling the page when you press 's').
+    return EM_TRUE;
+}
+
+// This function will be called by Emscripten whenever a key is released.
+EM_BOOL keyup_callback(int eventType, const EmscriptenKeyboardEvent *keyEvent, void *userData) {
+    // We store that this key is now released.
+    keyStates[keyEvent->key] = false;
+    return EM_TRUE;
+}
+
+
+void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
+    float xpos = static_cast<float>(xposIn);
+    float ypos = static_cast<float>(yposIn);
+    if (firstMouse) {
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
+    float xoffset = xpos - lastX;
+    float yoffset = lastY - ypos;
+    lastX = xpos;
+    lastY = ypos;
+    camera.ProcessMouseMovement(xoffset, yoffset);
+}
+
+
 
 void Start() {
   if (!glfwInit()) {
@@ -157,14 +277,41 @@ void Start() {
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
   GLFWwindow* window =
       glfwCreateWindow(kWidth, kHeight, "WebGPU window", nullptr, nullptr);
+
+  // ADD THIS BACK
+  glfwSetCursorPosCallback(window, mouse_callback);
+  glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
   surface = wgpu::glfw::CreateSurfaceForWindow(instance, window);
 
   InitGraphics();
+  #if defined(__EMSCRIPTEN__)
+    emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, true, keydown_callback);
+    emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, true, keyup_callback);
+  #endif
 
 #if defined(__EMSCRIPTEN__)
-  emscripten_set_main_loop(Render, 0, false);
+  emscripten_set_main_loop_arg(
+      [](void* arg) {
+        GLFWwindow* window = reinterpret_cast<GLFWwindow*>(arg);
+        // We still need a way to pass deltaTime to processInput on the web.
+        // Let's calculate it inside the loop.
+        float currentFrame = static_cast<float>(glfwGetTime());
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
+        processInput(window);
+        Render();
+      },
+      window, 0, true);
 #else
   while (!glfwWindowShouldClose(window)) {
+    // ADD THIS BACK for smooth, frame-rate independent movement
+    float currentFrame = static_cast<float>(glfwGetTime());
+    deltaTime = currentFrame - lastFrame;
+    lastFrame = currentFrame;
+
+    processInput(window); // ADD THIS BACK
+
     glfwPollEvents();
     Render();
     surface.Present();

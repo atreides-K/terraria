@@ -20,7 +20,7 @@ glm::mat4 Camera::getViewMatrix()
     // Up is the up vector.
     return glm::lookAt(Position, Position + Front, Up);
 }
-void Camera::processKeyboard(CameraMovement direction, float deltaTime)
+void Camera::ProcessKeyboard(CameraMovement direction, float deltaTime)
 {
     float velocity = MovementSpeed * deltaTime;
     if (direction == CameraMovement::FORWARD)
@@ -32,7 +32,7 @@ void Camera::processKeyboard(CameraMovement direction, float deltaTime)
     if (direction == CameraMovement::RIGHT)
         Position += Right * velocity;
 }
-void Camera::processMouseMovement(float xoffset, float yoffset, bool constrainPitch)
+void Camera::ProcessMouseMovement(float xoffset, float yoffset, bool constrainPitch)
 {
     xoffset *= MouseSensitivity;
     yoffset *= MouseSensitivity;
