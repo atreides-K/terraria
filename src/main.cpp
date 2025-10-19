@@ -234,6 +234,9 @@ void processInput(GLFWwindow *window) {
 #endif
 }
 // This function will be called by Emscripten whenever a key is pressed down.
+
+
+#if defined(__EMSCRIPTEN__)
 EM_BOOL keydown_callback(int eventType, const EmscriptenKeyboardEvent *keyEvent, void *userData) {
     // The keyEvent->key field gives us a string like "w", "s", "Shift", etc.
     // We store that this key is now pressed down.
@@ -250,6 +253,7 @@ EM_BOOL keyup_callback(int eventType, const EmscriptenKeyboardEvent *keyEvent, v
     keyStates[keyEvent->key] = false;
     return EM_TRUE;
 }
+#endif
 
 
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn) {
