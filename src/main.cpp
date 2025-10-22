@@ -33,6 +33,7 @@ const uint32_t kHeight = 800;
 // Camera 
 #include <map>
 #include <string>
+#include <demLoader.h>
 
 std::map<std::string, bool> keyStates;
 Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
@@ -318,13 +319,30 @@ void Start() {
 
     glfwPollEvents();
     Render();
-    surface.Present();
+    surface.Present();00
     instance.ProcessEvents();
   }
 #endif
 }
 
 int main() {
+  try {
+        // Use the VIRTUAL paths you specified in CMake.
+        const std::string hdrPath = "/data/output.hdr";
+        const std::string rawPath = "/data/output.raw";
+
+        std::cout << "load DEM from vfs" << std::endl;
+        DEMLoader loader(rawPath, hdrPath);
+
+        // You can now use the loaded data...
+        int width = loader.getWidth();
+        int height = loader.getHeight();
+        std::cout << "Successfully loaded DEM with dimensions: " 
+                  << width << "x" << height << std::endl;
+
+    } catch (const std::runtime_error& e) {
+        std::cerr << "An error occurred: " << e.what() << std::endl;
+    }
   Init();
   Start();
 }

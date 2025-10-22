@@ -110,3 +110,8 @@ sudo apt install libgal-dev gdal-bin
     NoData Value=-32768
 
 ```
+
+### converting tif to .raw 
+```
+gdal_translate -of ENVI -ot Float32 input_dem.tif output_dem.raw
+```
