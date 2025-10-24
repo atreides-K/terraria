@@ -44,6 +44,9 @@ Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
 wgpu::Buffer uniformBuffer;
 wgpu::BindGroup uniformBindGroup;
 
+// mesh
+Mesh mesh;
+
 // NEW: Mouse input state
 float lastX = kWidth / 2.0f;
 float lastY = kHeight / 2.0f;
@@ -157,7 +160,17 @@ void Render() {
   
   pass.SetPipeline(pipeline);
   pass.SetVertexBuffer(0, vertexBuffer, 0, sizeof(Vertex) * plane.size());
-  pass.Draw(4);
+  pass.SetIndexBuffer(mesh.getIndexBuffer(), wgpu::IndexFormat::Uint32, 
+  0,
+  sizeof(uint32_t) * mesh.getIndexCount());
+  // void DrawIndexed(
+//     uint32_t indexCount,
+//     uint32_t instanceCount = 1,
+//     uint32_t firstIndex = 0,
+//     int32_t baseVertex = 0,
+//     uint32_t firstInstance = 0
+// );
+  pass.DrawIndexed(mesh.getIndexCount(), 1, 0, 0, 0);
   pass.End();
   wgpu::CommandBuffer commands = encoder.Finish();
   device.GetQueue().Submit(1, &commands);
@@ -165,7 +178,7 @@ void Render() {
 
 void InitGraphics() {
   ConfigureSurface();
-  // Mesh(device, plane);
+  mesh(device);
   // LAYOUT SETUP
   wgpu::BindGroupLayoutEntry bglEntry{};
   bglEntry.binding = 0;
@@ -190,7 +203,7 @@ void InitGraphics() {
 
 
   // BUFFER SETUP
-  vertexBuffer = BufferUtils::createVertexBuffer(device, plane);
+  vertexBuffer = mesh.getVertexBuffer();
   uniformBuffer = BufferUtils::createUniformBuffer(device, sizeof(glm::mat4));
 
   
@@ -222,6 +235,12 @@ void processInput(GLFWwindow *window) {
         camera.ProcessKeyboard(CameraMovement::LEFT, deltaTime);
     if (keyStates["d"] || keyStates["D"])
         camera.ProcessKeyboard(CameraMovement::RIGHT, deltaTime);
+    if (keyStates["d"] || keyStates["D"])
+        camera.ProcessKeyboard(CameraMovement::RIGHT, deltaTime);
+    if (keyStates["q"] || keyStates[" "])
+        camera.ProcessKeyboard(CameraMovement::UP, deltaTime);
+    if (keyStates["Shift"] || keyStates["SHIFT"])
+        camera.ProcessKeyboard(CameraMovement::DOWN, deltaTime);
 #else
     // Native desktop version: Use polling with glfwGetKey.
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
@@ -232,6 +251,10 @@ void processInput(GLFWwindow *window) {
         camera.ProcessKeyboard(CameraMovement::LEFT, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         camera.ProcessKeyboard(CameraMovement::RIGHT, deltaTime);
+    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+        camera.ProcessKeyboard(CameraMovement::UP, deltaTime);
+    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
+        camera.ProcessKeyboard(CameraMovement::DOWN, deltaTime);
 #endif
 }
 // This function will be called by Emscripten whenever a key is pressed down.
@@ -326,23 +349,23 @@ void Start() {
 }
 
 int main() {
-  try {
-        // Use the VIRTUAL paths you specified in CMake.
-        const std::string hdrPath = "/data/output.hdr";
-        const std::string rawPath = "/data/output.raw";
+  // try {
+  //       // Use the VIRTUAL paths you specified in CMake.
+  //       const std::string hdrPath = "/data/output.hdr";
+  //       const std::string rawPath = "/data/output.raw";
 
-        std::cout << "load DEM from vfs" << std::endl;
-        DEMLoader loader(rawPath, hdrPath);
+  //       std::cout << "load DEM from vfs" << std::endl;
+  //       DEMLoader loader(rawPath, hdrPath);
 
-        // You can now use the loaded data...
-        int width = loader.getWidth();
-        int height = loader.getHeight();
-        std::cout << "Successfully loaded DEM with dimensions: " 
-                  << width << "x" << height << std::endl;
+  //       // You can now use the loaded data...
+  //       int width = loader.getWidth();
+  //       int height = loader.getHeight();
+  //       std::cout << "Successfully loaded DEM with dimensions: " 
+  //                 << width << "x" << height << std::endl;
 
-    } catch (const std::runtime_error& e) {
-        std::cerr << "An error occurred: " << e.what() << std::endl;
-    }
+  //   } catch (const std::runtime_error& e) {
+  //       std::cerr << "An error occurred: " << e.what() << std::endl;
+  //   }
   Init();
   Start();
 }

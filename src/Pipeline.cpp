@@ -52,9 +52,11 @@ Pipeline::Pipeline(const wgpu::Device& device,
     };
 
     wgpu::PrimitiveState primitiveState{
-        .topology = config.topology
+        .topology = config.topology,
+        // .stripIndexFormat = config.indexFormat,
+        
     };
-
+    
 
 
     wgpu::RenderPipelineDescriptor descriptor{

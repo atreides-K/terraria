@@ -18,7 +18,21 @@ namespace BufferUtils{
         return buffer;
     }
 
-
+    wgpu::Buffer createIndexBuffer(
+        const wgpu::Device& device, 
+        const std::vector<uint32_t>& indices){
+        
+        wgpu::BufferDescriptor bufferDescriptor{
+            .usage=wgpu::BufferUsage::Index|wgpu::BufferUsage::CopyDst,
+            .size=indices.size() * sizeof(uint32_t),
+            .mappedAtCreation=true
+        };
+        wgpu::Buffer buffer=device.CreateBuffer(&bufferDescriptor);
+        void* mapped=buffer.GetMappedRange();
+        memcpy(mapped,indices.data(),bufferDescriptor.size);
+        buffer.Unmap();
+        return buffer;
+    }
     wgpu::Buffer createUniformBuffer(
         const wgpu::Device& device,
          uint64_t size

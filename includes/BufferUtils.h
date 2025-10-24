@@ -28,6 +28,11 @@ namespace BufferUtils {
         const std::vector<Vertex>& vertices
         );
 
+    wgpu::Buffer createIndexBuffer(
+        const wgpu::Device& device,
+        const std::vector<uint32_t>& indices
+    );
+
     wgpu::Buffer createUniformBuffer(
         const wgpu::Device& device,
          uint64_t size
