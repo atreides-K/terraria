@@ -8,7 +8,8 @@
 // Assuming it's still in your BufferUtils.h
 #include "BufferUtils.h"
 
-const int N=11;
+// int x=11;
+const int m=10;
 const float spacing = 1.0f;
 
 
@@ -28,7 +29,16 @@ public:
     uint32_t getVertexCount() const;
     uint32_t getIndexCount() const;
 
-    
+    // New getter methods for the additional mesh types
+    wgpu::Buffer getRfuVertexBuffer() const;
+    wgpu::Buffer getRfuIndexBuffer() const;
+    uint32_t getRfuVertexCount() const;
+    uint32_t getRfuIndexCount() const;
+
+    wgpu::Buffer getTrimVertexBuffer() const;
+    wgpu::Buffer getTrimIndexBuffer() const;
+    uint32_t getTrimVertexCount() const;
+    uint32_t getTrimIndexCount() const;
 
 private:
     // Private member variables. The Mesh object owns these resources.
@@ -36,6 +46,18 @@ private:
     wgpu::Buffer m_indexBuffer;
     uint32_t m_vertexCount = 0;
     uint32_t m_indexCount = 0;
-    std::vector<Vertex> createMesh();
-    std::vector<uint32_t> createIndices();
-};
+
+    // rfu
+    wgpu::Buffer rfu_vertexBuffer;
+    wgpu::Buffer rfu_indexBuffer;
+    uint32_t rfu_vertexCount = 0;
+    uint32_t rfu_indexCount = 0;
+
+     // trim
+    wgpu::Buffer trim_vertexBuffer;
+    wgpu::Buffer trim_indexBuffer;
+    uint32_t trim_vertexCount = 0;
+    uint32_t trim_indexCount = 0;
+    std::vector<Vertex> createMesh(const int& h=m,const int& w=m);
+    std::vector<uint32_t> createIndices(const int& h=m,const int& w=m);
+};               
