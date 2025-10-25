@@ -23,7 +23,9 @@ class Pipeline
 {
     public:
         Pipeline(const wgpu::Device& device,
-                 const PipelineConfig& config);
+                 const PipelineConfig& config,
+                 const std::string& shaderCode
+                );
         
         wgpu::RenderPipeline getPipeline() const;
 

@@ -27,13 +27,15 @@ const char shaderCode[] = R"(
 
 
 
-Pipeline::Pipeline(const wgpu::Device& device,
- const PipelineConfig& config
+Pipeline::Pipeline(
+    const wgpu::Device& device,
+    const PipelineConfig& config,
+    const std::string& shaderCode
 ){
 
     VertexPipelineLayoutData layoutData;
 
-    wgpu::ShaderSourceWGSL wgsl{{.code = shaderCode}};
+    wgpu::ShaderSourceWGSL wgsl{{.code = shaderCode.c_str()}};
     wgpu::ShaderModuleDescriptor shaderModuleDescriptor{.nextInChain = &wgsl};
     wgpu::ShaderModule shaderModule =
         device.CreateShaderModule(&shaderModuleDescriptor);

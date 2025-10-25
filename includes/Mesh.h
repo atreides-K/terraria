@@ -8,7 +8,7 @@
 // Assuming it's still in your BufferUtils.h
 #include "BufferUtils.h"
 
-const int N=500;
+const int N=11;
 const float spacing = 1.0f;
 
 

@@ -17,6 +17,7 @@ set(APP_SOURCES
     src/Mesh.cpp
     src/Pipeline.cpp
     utils/demLoader.cpp
+    utils/ShaderLoader.cpp
 )
 add_executable(app ${APP_SOURCES})
 
@@ -36,6 +37,7 @@ if(EMSCRIPTEN)
     "-sALLOW_MEMORY_GROWTH=1"
     "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/dem/output.hdr@/data/output.hdr"
     "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/dem/output.raw@/data/output.raw"
+    "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/shaders/mesh.wgsl@/data/mesh.wgsl"
     "-sASYNCIFY=1"
     "-fexceptions"
     "-sUSE_GLFW=3"

@@ -35,6 +35,10 @@ const uint32_t kHeight = 800;
 #include <string>
 #include <demLoader.h>
 
+
+// shader
+#include <ShaderLoader.h>
+
 std::map<std::string, bool> keyStates;
 Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
 
@@ -179,6 +183,17 @@ void Render() {
 void InitGraphics() {
   ConfigureSurface();
   mesh(device);
+
+  std::string shaderCode;
+    try {
+        shaderCode = loadShaderSource("data/mesh.wgsl"); 
+    } catch (const std::runtime_error& e) {
+        std::cerr << "Fatal Error: " << e.what() << std::endl;
+        // Handle error, maybe exit or throw an exception.
+        exit(1);
+    }
+    
+    
   // LAYOUT SETUP
   wgpu::BindGroupLayoutEntry bglEntry{};
   bglEntry.binding = 0;
@@ -199,7 +214,7 @@ void InitGraphics() {
   PipelineConfig MeshConfig{};
   MeshConfig.surfaceFormat = format;
   MeshConfig.layout = CameraPipelineLayout;
-  pipeline=Pipeline(device,MeshConfig).getPipeline();
+  pipeline=Pipeline(device,MeshConfig,shaderCode).getPipeline();
 
 
   // BUFFER SETUP
