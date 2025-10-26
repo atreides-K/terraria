@@ -3,26 +3,26 @@
 #include <webgpu/webgpu_cpp.h>
 
 void Mesh::operator()(const wgpu::Device& device){
-    std::vector<Vertex> mesh = createMesh(10,3);
+    std::vector<Vertex> mesh = createMesh();
     m_vertexBuffer=BufferUtils::createVertexBuffer(device,mesh);
     m_vertexCount=static_cast<uint32_t>(mesh.size());
-    std::vector<uint32_t> indices=createIndices(10,3);
+    std::vector<uint32_t> indices=createIndices();
     m_indexCount=static_cast<uint32_t>(indices.size());
     m_indexBuffer = BufferUtils::createIndexBuffer(device,indices);
 
-    // std::vector<Vertex> rfu = createMesh(m,3);
-    // rfu_vertexBuffer=BufferUtils::createVertexBuffer(device,rfu);
-    // rfu_vertexCount=static_cast<uint32_t>(rfu.size());
-    // indices=createIndices(m,3);
-    // rfu_indexCount=static_cast<uint32_t>(indices.size());
-    // rfu_indexBuffer = BufferUtils::createIndexBuffer(device,indices);
+    std::vector<Vertex> rfu = createMesh(m*4-1, m*4-1);
+    rfu_vertexBuffer=BufferUtils::createVertexBuffer(device,rfu);
+    rfu_vertexCount=static_cast<uint32_t>(rfu.size());
+    indices=createIndices(m*4-1,m*4-1);
+    rfu_indexCount=static_cast<uint32_t>(indices.size());
+    rfu_indexBuffer = BufferUtils::createIndexBuffer(device,indices);
 
-    // std::vector<Vertex> trim = createMesh(m,2);
-    // trim_vertexBuffer=BufferUtils::createVertexBuffer(device,trim);
-    // trim_vertexCount=static_cast<uint32_t>(trim.size());
-    // indices=createIndices(m,2);
-    // trim_indexCount=static_cast<uint32_t>(indices.size());
-    // trim_indexBuffer = BufferUtils::createIndexBuffer(device,indices);
+    std::vector<Vertex> trim = createMesh(m,2);
+    trim_vertexBuffer=BufferUtils::createVertexBuffer(device,trim);
+    trim_vertexCount=static_cast<uint32_t>(trim.size());
+    indices=createIndices(m,2);
+    trim_indexCount=static_cast<uint32_t>(indices.size());
+    trim_indexBuffer = BufferUtils::createIndexBuffer(device,indices);
 }
 
 wgpu::Buffer Mesh::getVertexBuffer() const{
@@ -77,9 +77,9 @@ std::vector<Vertex> Mesh::createMesh(const int& h,const int& w){
             for(int j=0;j<h;j++){
                 Vertex v;
                 // Center the grid aroundorigin
-                v.position[0]=i*spacing-(w*spacing)/2.0f;
+                v.position[0]=i*spacing;
                 v.position[1]=0.0f;
-                v.position[2]=j*spacing-(h*spacing)/2.0f;
+                v.position[2]=j*spacing;
                 mesh.push_back(v);
             }
         }

@@ -9,7 +9,7 @@
 #include "BufferUtils.h"
 
 // int x=11;
-const int m=10;
+const int m=50;
 const float spacing = 1.0f;
 
 

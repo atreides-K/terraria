@@ -40,7 +40,7 @@ const uint32_t kHeight = 800;
 #include <ShaderLoader.h>
 
 std::map<std::string, bool> keyStates;
-Camera camera(glm::vec3(0.0f, 10.0f, 0.0f));
+Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
 
 
 
@@ -48,17 +48,9 @@ Camera camera(glm::vec3(0.0f, 10.0f, 0.0f));
 wgpu::Buffer uniformBuffer;
 wgpu::BindGroup uniformBindGroup;
 
+wgpu::Buffer modelUniformBuffer ;
+wgpu::BindGroup modelBindGroup ;
 
-// MData
-struct MData {
-    glm::vec2 offset;  // 8 bytes
-    float scale;       // 4 bytes
-    uint32_t level;    // 4 bytes
-
-};
-
-wgpu::Buffer mDataUniformBuffer;
-wgpu::BindGroup mDataBindGroup;
 // mesh
 Mesh mesh;
 
@@ -83,16 +75,8 @@ std::vector<Vertex> plane = {
 wgpu::Buffer vertexBuffer;
 UniformBinding uniformBinding;
 
-wgpu::Buffer instanceBuffer = nullptr;
 
-    // 2. Instance data
-    struct InstanceData {
-        glm::vec2 offset;
-        float scale;
-        uint32_t level;
-        glm::vec4 color;
-    };
-    std::vector<InstanceData> instances;
+
 
 
 void ConfigureSurface() {
@@ -150,78 +134,125 @@ void Init() {
   instance.WaitAny(f2, UINT64_MAX);
 }
 void Render() {
+    // 1. Standard Per-Frame Setup
+    //----------------------------------------------------------------
     wgpu::SurfaceTexture surfaceTexture;
     surface.GetCurrentTexture(&surfaceTexture);
 
-    // 1. Camera matrices
-    glm::mat4 view = camera.getViewMatrix(); 
-    glm::mat4 proj = glm::perspective(glm::radians(45.0f),
-                                      (float)kWidth / (float)kHeight,
-                                      0.1f, 100.0f);
-    glm::mat4 viewProj = proj * view;
-    device.GetQueue().WriteBuffer(uniformBuffer, 0, &viewProj, sizeof(glm::mat4));
 
     
-    // 3. Render pass setup
     wgpu::RenderPassColorAttachment attachment{
-        .view = surfaceTexture.texture.CreateView(),
-        .loadOp = wgpu::LoadOp::Clear,
-        .storeOp = wgpu::StoreOp::Store,
-        .clearValue = {0.1, 0.1, 0.15, 1.0}
+      .view = surfaceTexture.texture.CreateView(),
+      .loadOp = wgpu::LoadOp::Clear,
+      .storeOp = wgpu::StoreOp::Store,
+      .clearValue = {0.1f, 0.2f, 0.3f, 1.0f} // A dark blue clear color
     };
-    wgpu::RenderPassDescriptor passDesc{.colorAttachmentCount = 1, .colorAttachments = &attachment};
+
+    wgpu::RenderPassDescriptor renderpass{
+        .colorAttachmentCount = 1,
+        .colorAttachments = &attachment
+    };
 
     wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
-    wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&passDesc);
+    wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderpass);
+
+
+    // 2. Set Global State for the Entire Pass
+    //----------------------------------------------------------------
     pass.SetPipeline(pipeline);
+
+    // Compute and set the scene-wide camera matrix (Bind Group 0)
+    // This is done only ONCE per frame as it's the same for all objects.
+    glm::mat4 view = camera.getViewMatrix();
+    glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)kWidth / (float)kHeight, 0.1f, 100.0f);
+    glm::mat4 viewProjMatrix = projection * view;
+    device.GetQueue().WriteBuffer(uniformBuffer, 0, &viewProjMatrix, sizeof(glm::mat4));
     pass.SetBindGroup(0, uniformBindGroup);
-    
-     InstanceData rfuInstance = { {0.0f, 0.0f}, 1.0f, 0, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f) };  // Default: no offset, full scale, white color
 
- 
-       // Create (or reuse) a separate buffer for rfu instance
-    wgpu::Buffer rfuInstanceBuffer;  // Assume this is a member variable like instanceBuffer
-    if (!rfuInstanceBuffer) {
-        wgpu::BufferDescriptor desc = {};
-        desc.usage = wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst;
-        desc.size = sizeof(InstanceData);
-        rfuInstanceBuffer = device.CreateBuffer(&desc);
+
+    // 3. Assemble the Clipmap Ring, Piece by Piece
+    //----------------------------------------------------------------
+
+    // This 'm' value would come from your clipmap logic. We'll use a constant for this example.
+    const int m = 10;
+    // The size of a block in world units is determined by its vertex count and spacing.
+    // If spacing is 1.0, a block of 'm' vertices has a size of 'm - 1'.
+    const float blockSize = (m - 1.0f) * 1; // Assuming 'spacing' is a public member of Mesh
+
+
+    // --- A. Draw the 12 main (m x m) blocks (Gray in diagram) ---
+    const std::vector<glm::vec2> blockOffsets = {
+        {-1.5f,  1.5f}, {-0.5f,  1.5f}, {0.5f,  1.5f}, {1.5f,  1.5f}, // Top Row
+        {-1.5f, -1.5f}, {-0.5f, -1.5f}, {0.5f, -1.5f}, {1.5f, -1.5f}, // Bottom Row
+        {-1.5f,  0.5f}, { 1.5f,  0.5f},                               // Middle Left/Right
+        {-1.5f, -0.5f}, { 1.5f, -0.5f}
+    };
+
+    // Point the GPU to the vertex/index data for THIS type of mesh piece
+    pass.SetVertexBuffer(0, mesh.getVertexBuffer(), 0, mesh.getVertexCount() * sizeof(Vertex));
+    pass.SetIndexBuffer(mesh.getIndexBuffer(), wgpu::IndexFormat::Uint32, 0, mesh.getIndexCount() * sizeof(uint32_t));
+
+    for (const auto& offset : blockOffsets) {
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(offset.x * blockSize, 0.0f, offset.y * blockSize));
+
+        // Update the GPU buffer with the matrix for THIS specific block
+        device.GetQueue().WriteBuffer(modelUniformBuffer, 0, &model, sizeof(glm::mat4));
+
+        // Set Bind Group 1. This must be done for EACH draw call that uses a different model matrix.
+        pass.SetBindGroup(1, modelBindGroup);
+
+        pass.DrawIndexed(mesh.getIndexCount(), 1, 0, 0, 0);
     }
-    device.GetQueue().WriteBuffer(rfuInstanceBuffer, 0, &rfuInstance, sizeof(InstanceData));
-
-    // ... (render pass setup, SetPipeline, SetBindGroup)
-
-    // Instanced draw (unchanged)
-    pass.SetVertexBuffer(0, mesh.getVertexBuffer());
-    pass.SetIndexBuffer(mesh.getIndexBuffer(), wgpu::IndexFormat::Uint32);
-    pass.SetVertexBuffer(1, instanceBuffer);
-    pass.DrawIndexed(mesh.getIndexCount(), instances.size(), 0, 0, 0);
-
-    // RFU draw: Update slot 1 to use the single-instance buffer
-    pass.SetVertexBuffer(0, mesh.getRfuVertexBuffer());
-    pass.SetIndexBuffer(mesh.getRfuIndexBuffer(), wgpu::IndexFormat::Uint32);
-    pass.SetVertexBuffer(1, rfuInstanceBuffer);  // Key change: Bind rfu-specific instance data
-    pass.DrawIndexed(mesh.getRfuIndexCount(), 1, 0, 0, 0);
 
 
+    // // --- B. Draw the 4 (m x 3) Ring Fix-up blocks (Green in diagram) ---
+    // // The offset distance is half the full ring width minus half a block width.
+    // // Full width = 4 blocks -> 2 * blockSize. Half width = blockSize.
+    // const float fixupDist = 2.0f * blockSize - (blockSize / 2.0f);
 
-    // Vertex + Instance buffers
-    pass.SetVertexBuffer(0, mesh.getVertexBuffer());
-    pass.SetIndexBuffer(mesh.getIndexBuffer(), wgpu::IndexFormat::Uint32);
-    pass.SetVertexBuffer(1, instanceBuffer);
+    // // Transforms are {posX, posY, posZ, rotationY}
+    // const std::vector<glm::vec4> fixupTransforms = {
+    //     { 0.0f, 0.0f,  1.5f * blockSize,   0.0f}, // Top
+    //     { 0.0f, 0.0f, -1.5f * blockSize, 180.0f}, // Bottom
+    //     { 1.5f * blockSize, 0.0f,  0.0f,  -90.0f}, // Right
+    //     {-1.5f * blockSize, 0.0f,  0.0f,   90.0f}  // Left
+    // };
 
-    // One draw call for all instances
-    pass.DrawIndexed(mesh.getIndexCount(), instances.size(), 0, 0, 0);
-        // ... (existing code up to instanceBuffer write)
+    // // Switch to the vertex/index data for the fix-up mesh
+    // pass.SetVertexBuffer(0, mesh.getRfuVertexBuffer(), 0, mesh.getRfuVertexCount() * sizeof(Vertex));
+    // pass.SetIndexBuffer(mesh.getRfuIndexBuffer(), wgpu::IndexFormat::Uint32, 0, mesh.getRfuIndexCount() * sizeof(uint32_t));
 
-    // New: Single instance data for rfu (customize color, offset, etc. as needed)
-  
-   
-    // ... (End, Finish, Submit)
+    // for (const auto& t : fixupTransforms) {
+    //     glm::mat4 model = glm::mat4(1.0f);
+    //     model = glm::translate(model, glm::vec3(t.x, t.y, t.z));
+    //     model = glm::rotate(model, glm::radians(t.w), glm::vec3(0.0f, 1.0f, 0.0f));
+
+    //     device.GetQueue().WriteBuffer(modelUniformBuffer, 0, &model, sizeof(glm::mat4));
+    //     pass.SetBindGroup(1, modelBindGroup);
+    //     pass.DrawIndexed(mesh.getRfuIndexCount(), 1, 0, 0, 0);
+    // }
+
+    // --- C. Draw the Interior Trim and other pieces ---
+    // You would continue the pattern here:
+    // 1. Define the transforms for the trim pieces.
+    // 2. Call pass.SetVertexBuffer() and pass.SetIndexBuffer() with the trim mesh data.
+    // 3. Loop through transforms, update model buffer, set bind group, and call DrawIndexed().
+    // ...
+
+
+    // 4. Finalize and Submit Commands
+    //----------------------------------------------------------------
     pass.End();
-    wgpu::CommandBuffer cmd = encoder.Finish();
-    device.GetQueue().Submit(1, &cmd);
+    wgpu::CommandBuffer commands = encoder.Finish();
+    device.GetQueue().Submit(1, &commands);
+
+    // For native applications that need to explicitly present
+    #if !defined(__EMSCRIPTEN__)
+        surface.Present();
+    #endif
 }
+
 
 void InitGraphics() {
   ConfigureSurface();
@@ -250,18 +281,18 @@ void InitGraphics() {
   };
   wgpu::BindGroupLayout cameraBindGroupLayout = device.CreateBindGroupLayout(&bglDesc);
 
-  // wgpu::BindGroupLayoutEntry mDataBglEntry{
-  //     .binding = 0,
-  //     .visibility = wgpu::ShaderStage::Vertex,
-  //     .buffer.type = wgpu::BufferBindingType::Uniform,
-  // };
-  // wgpu::BindGroupLayoutDescriptor mDataDesc{
-  //     .entryCount = 1,
-  //     .entries = &mDataBglEntry
-  // };
-  // wgpu::BindGroupLayout mDataGroupLayout = device.CreateBindGroupLayout(&mDataDesc);
+  wgpu::BindGroupLayoutEntry modelBglEntry{
+      .binding = 0,
+      .visibility = wgpu::ShaderStage::Vertex,
+      .buffer.type = wgpu::BufferBindingType::Uniform,
+  };
+  wgpu::BindGroupLayoutDescriptor modelBglDesc{
+      .entryCount = 1,
+      .entries = &modelBglEntry
+  };
+  wgpu::BindGroupLayout modelBindGroupLayout = device.CreateBindGroupLayout(&modelBglDesc);
 
-  std::vector<wgpu::BindGroupLayout> bindGroupLayouts = {cameraBindGroupLayout};
+  std::vector<wgpu::BindGroupLayout> bindGroupLayouts = {cameraBindGroupLayout, modelBindGroupLayout};
 
   wgpu::PipelineLayoutDescriptor layoutDesc{
       .bindGroupLayoutCount = static_cast<uint32_t>(bindGroupLayouts.size()),
@@ -273,27 +304,19 @@ void InitGraphics() {
   PipelineConfig MeshConfig{};
   MeshConfig.surfaceFormat = format;
   MeshConfig.layout = pipelineLayout;
-  try {
-      pipeline = Pipeline(device, MeshConfig, shaderCode).getPipeline();
-  } catch (const std::runtime_error& e) {
-      std::cerr << "Pipeline creation failed: " << e.what() << std::endl;
-  }
-  if (!pipeline) {
-      std::cerr << "Pipeline is invalid!" << std::endl;
-      exit(1);
-  }
+  pipeline=Pipeline(device,MeshConfig,shaderCode).getPipeline();
+
 
   // BUFFER SETUP
   vertexBuffer = mesh.getVertexBuffer();
   uniformBuffer = BufferUtils::createUniformBuffer(device, sizeof(glm::mat4));
-  std::cout << "Size of MData: " << sizeof(MData) << " bytes" << std::endl;
-  mDataUniformBuffer = BufferUtils::createUniformBuffer(device, sizeof(MData));
+
+  modelUniformBuffer = BufferUtils::createUniformBuffer(device, sizeof(glm::mat4));
   
   // BIND GROUP SETUP
   wgpu::BindGroupEntry bgEntry{};
   bgEntry.binding = 0; // Corresponds to @binding(0) in shader
   bgEntry.buffer = uniformBuffer;
-  bgEntry.offset = 0;
   bgEntry.size = sizeof(glm::mat4);
 
   wgpu::BindGroupDescriptor bgDesc{
@@ -302,59 +325,17 @@ void InitGraphics() {
     .entries = &bgEntry
   };
   uniformBindGroup = device.CreateBindGroup(&bgDesc);
-  // wgpu::BindGroupEntry mDataBgEntry{
-  //     .binding = 0,
-  //     .buffer = mDataUniformBuffer,
-  //     .offset = 0,
-  //     .size = sizeof(MData)
-  // };
-  // wgpu::BindGroupDescriptor mDataBgDesc{
-  //   .layout = mDataGroupLayout,
-  //   .entryCount = 1,
-  //   .entries = &mDataBgEntry
-  // };
-  // mDataBindGroup = device.CreateBindGroup(&mDataBgDesc);
-
-  
-    for(float i=1;i<3;i++){
-    int mm=m-1;
-    float scale=pow(2,i*spacing-1);
-    int x=mm*(pow(2,i-1)-1);
-    int z=-mm*2*(pow(2,i-1)-1);
-    std::vector<InstanceData> instancesLOD = {
-    // --- Top row of blocks ---
-    { { mm*3+x+2,  z }, scale, 0 , glm::vec4(1.0f, 0.0f, 1.0f, 1.0f)},
-    { {mm*3+x+2,  mm*scale + z}, scale, 1 , glm::vec4(0.0f, 1.0f, 0.0f, 1.0f)},
-    { { mm*3+x+2,  mm*2+2 +x-mm*(scale-1) }, scale, 1 , glm::vec4(0.0f, 1.0f, 1.0f, 1.0f)},
-    { { mm*3+x+2,  mm*3+2+x }, scale, 1 , glm::vec4(1.0f, 1.0f, 0.4f, 1.0f)},
-    
-
-    { { mm*2+2+x-mm*(scale-1),  z }, scale, 0 , glm::vec4(0.8f, 0.5f, 1.0f, 1.0f)},
-    { { mm*2+2+x-mm*(scale-1),   mm*3+2+x }, scale, 1 , glm::vec4(0.8f, 0.3f, 0.4f, 1.0f)},
-
-
-    { { mm+z+ mm*(scale-1),  z  }, scale, 0 , glm::vec4(0.7f, 0.2f, 0.0f, 1.0f)},
-    { { mm+z+mm*(scale-1),  mm*3+2+x }, scale, 1 , glm::vec4(0.0f, 0.2f, 0.4f, 1.0f)},
-
-    { { z     ,  z}, scale, 0 , glm::vec4(1.0f, 0.0f, 1.0f, 1.0f)},
-    { { z,  z+mm*scale }, scale, 1 , glm::vec4(0.0f, 1.0f, 0.0f, 1.0f)},
-    { {z,  mm*2+2 +x-mm*(scale-1) }, scale, 1 , glm::vec4(0.0f, 1.0f, 1.0f, 1.0f)},
-    { { z,  mm*3+2+x }, scale, 1 , glm::vec4(1.0f, 1.0f, 0.4f, 1.0f)},
-    
-    // { { -2.0f * m,  1.5f * m }, 1, 1 , glm::vec4(0.0f, 0.0f, 1.0f, 1.0f)},
-    
-    };
-      instances.insert(instances.end(), instancesLOD.begin(), instancesLOD.end());
-  }
-    // Create (or reuse) the instance buffer
-    if (!instanceBuffer) {
-        wgpu::BufferDescriptor desc = {};
-        desc.usage = wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst;
-        desc.size = sizeof(InstanceData) * instances.size();
-        instanceBuffer = device.CreateBuffer(&desc);
-    }
-    device.GetQueue().WriteBuffer(instanceBuffer, 0, instances.data(), sizeof(InstanceData) * instances.size());
-
+  wgpu::BindGroupEntry modelBgEntry{
+  .binding = 0,
+  .buffer = modelUniformBuffer,
+  .size = sizeof(glm::mat4)
+  };
+  wgpu::BindGroupDescriptor modelBgDesc{
+    .layout = modelBindGroupLayout,
+    .entryCount = 1,
+    .entries = &modelBgEntry
+  };
+  modelBindGroup = device.CreateBindGroup(&modelBgDesc);
 
 }
 
@@ -505,4 +486,56 @@ int main() {
   //   }
   Init();
   Start();
+}
+
+// This struct defines the format of the vertex data that we send from the CPU.
+// It must match the layout of the `Vertex` struct in your C++ code.
+struct VertexInput {
+    // @location(0) corresponds to the first attribute in the vertex buffer layout.
+    @location(0) position: vec3f,
+};
+
+// This struct holds the camera's view and projection matrices, combined into one.
+// This data is the same for every object drawn in a single frame.
+struct CameraUniforms {
+    view_projection_matrix: mat4x4<f32>,
+};
+
+// NEW: This struct holds the per-object model matrix.
+// This will change for each individual piece of the clipmap ring we draw.
+struct ModelUniforms {
+    model_matrix: mat4x4<f32>,
+};
+
+// This uniform variable will get its data from the buffer bound at group 0, binding 0.
+// In C++, this is your `uniformBindGroup`.
+@group(0) @binding(0)
+var<uniform> camera: CameraUniforms;
+
+// NEW: This uniform variable gets its data from the buffer bound at group 1, binding 0.
+// In C++, this is your `modelBindGroup`. It now correctly expects a 4x4 matrix.
+@group(1) @binding(0)
+var<uniform> model: ModelUniforms;
+
+
+@vertex
+fn vertexMain(input: VertexInput) -> @builtin(position) vec4f {
+    // 1. Convert the input vertex position (vec3f) to a homogeneous coordinate (vec4f).
+    //    The 'w' component of 1.0 is used for position vectors.
+    let model_position = vec4f(input.position, 1.0);
+
+    // 2. Transform the vertex from its local model space into world space
+    //    by multiplying it with the per-object model matrix.
+    let world_position = model.model_matrix * model_position;
+
+    // 3. Transform the world space position into final clip space
+    //    by multiplying it with the camera's view-projection matrix.
+    //    This is the final position that will be rendered.
+    return camera.view_projection_matrix * world_position;
+}
+
+@fragment
+fn fragmentMain() -> @location(0) vec4f {
+  // Return a solid color for the fragment (e.g., a nice orange).
+  return vec4f(1.0, 0.5, 0.0, 1.0);
 }

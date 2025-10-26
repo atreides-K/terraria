@@ -18,7 +18,12 @@ struct PipelineConfig{
     wgpu::IndexFormat indexFormat=wgpu::IndexFormat::Uint32;
 };
 
-
+struct Instance {
+    glm::vec2 offset;
+    float scale;
+    uint32_t level;
+    glm::vec4 color;
+};
 class Pipeline
 {
     public:
