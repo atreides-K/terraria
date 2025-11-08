@@ -9,7 +9,7 @@
 #include "BufferUtils.h"
 
 // int x=11;
-const int m=50;
+const int m=64;
 const float spacing = 1.0f;
 
 
@@ -59,5 +59,6 @@ private:
     uint32_t trim_vertexCount = 0;
     uint32_t trim_indexCount = 0;
     std::vector<Vertex> createMesh(const int& h=m,const int& w=m);
+    std::vector<Vertex> createSmallMesh(const int& h=m,const int& w=m);
     std::vector<uint32_t> createIndices(const int& h=m,const int& w=m);
 };               

@@ -1,9 +1,10 @@
 #include "Mesh.h"
 #include "BufferUtils.h"
 #include <webgpu/webgpu_cpp.h>
+#include <iostream>
 
 void Mesh::operator()(const wgpu::Device& device){
-    std::vector<Vertex> mesh = createMesh();
+    std::vector<Vertex> mesh = createSmallMesh();
     m_vertexBuffer=BufferUtils::createVertexBuffer(device,mesh);
     m_vertexCount=static_cast<uint32_t>(mesh.size());
     std::vector<uint32_t> indices=createIndices();
@@ -72,6 +73,7 @@ uint32_t Mesh::getTrimIndexCount() const{
 }
 
 std::vector<Vertex> Mesh::createMesh(const int& h,const int& w){
+    std::cout<<"Creating mesh with height: "<<h<<" and width: "<<w<<std::endl;
         std::vector<Vertex> mesh;
         for(int i=0;i<w;i++){
             for(int j=0;j<h;j++){
@@ -81,6 +83,24 @@ std::vector<Vertex> Mesh::createMesh(const int& h,const int& w){
                 v.position[1]=0.0f;
                 v.position[2]=j*spacing;
                 mesh.push_back(v);
+                // std::cout<<"Vertex "<<(i*h + j)<<" : ("<<v.position[0]<<","<<v.position[1]<<","<<v.position[2]<<")"<<std::endl;
+            }
+        }
+        return mesh;
+    }
+
+std::vector<Vertex> Mesh::createSmallMesh(const int& h,const int& w){
+    std::cout<<"Creating mesh with height: "<<h<<" and width: "<<w<<std::endl;
+        std::vector<Vertex> mesh;
+        for(int i=0;i<h;i++){
+            for(int j=0;j<w;j++){
+                Vertex v;
+                // Center the grid aroundorigin
+                v.position[0]=-i*spacing;
+                v.position[1]=0.0f;
+                v.position[2]=j*spacing;
+                mesh.push_back(v);
+                // std::cout<<"Vertex "<<(i*h + j)<<" : ("<<v.position[0]<<","<<v.position[1]<<","<<v.position[2]<<")"<<std::endl;
             }
         }
         return mesh;

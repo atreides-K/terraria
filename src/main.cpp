@@ -26,8 +26,8 @@ wgpu::RenderPipeline pipeline;
 
 wgpu::Surface surface;
 wgpu::TextureFormat format;
-const uint32_t kWidth = 1000;
-const uint32_t kHeight = 800;
+const uint32_t kWidth = 1920;
+const uint32_t kHeight = 1080;
 
 
 // Camera 
@@ -40,14 +40,14 @@ const uint32_t kHeight = 800;
 #include <ShaderLoader.h>
 
 std::map<std::string, bool> keyStates;
-Camera camera(glm::vec3(0.0f, 10.0f, 0.0f));
+Camera camera(glm::vec3(0.0f, 30.0f, 0.0f));
 
 
 
 
 wgpu::Buffer uniformBuffer;
 wgpu::BindGroup uniformBindGroup;
-
+wgpu::Buffer rfuInstanceBuffer;
 
 // MData
 struct MData {
@@ -73,13 +73,7 @@ float lastFrame = 0.0f;
 
 
 
-std::vector<Vertex> plane = {
-  {{-0.8f, -1.0f, 0.0f}},
-  {{ 1.0f, -1.0f, 0.0f}},
-  {{-1.0f,  1.0f, 0.0f}},
-  {{ 0.8f, 0.9f, 0.0f}},
-  
-};
+
 wgpu::Buffer vertexBuffer;
 UniformBinding uniformBinding;
 
@@ -153,7 +147,7 @@ void Render() {
     wgpu::SurfaceTexture surfaceTexture;
     surface.GetCurrentTexture(&surfaceTexture);
 
-    // 1. Camera matrices
+    // 1. Update camera uniform buffer
     glm::mat4 view = camera.getViewMatrix(); 
     glm::mat4 proj = glm::perspective(glm::radians(45.0f),
                                       (float)kWidth / (float)kHeight,
@@ -162,7 +156,7 @@ void Render() {
     device.GetQueue().WriteBuffer(uniformBuffer, 0, &viewProj, sizeof(glm::mat4));
 
     
-    // 3. Render pass setup
+    // 2. Setup render pass
     wgpu::RenderPassColorAttachment attachment{
         .view = surfaceTexture.texture.CreateView(),
         .loadOp = wgpu::LoadOp::Clear,
@@ -173,51 +167,31 @@ void Render() {
 
     wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
     wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&passDesc);
+
+    // Set pipeline and bind groups once for the entire pass
     pass.SetPipeline(pipeline);
     pass.SetBindGroup(0, uniformBindGroup);
     
-     InstanceData rfuInstance = { {0.0f, 0.0f}, 1.0f, 0, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f) };  // Default: no offset, full scale, white color
+    // --- DRAW 1: The main instanced mesh ---
+    pass.SetVertexBuffer(0, mesh.getVertexBuffer());
+    pass.SetIndexBuffer(mesh.getIndexBuffer(), wgpu::IndexFormat::Uint32);
+    pass.SetVertexBuffer(1, instanceBuffer);
+    pass.DrawIndexed(mesh.getIndexCount(), instances.size(), 0, 0, 0);
 
- 
-       // Create (or reuse) a separate buffer for rfu instance
-    wgpu::Buffer rfuInstanceBuffer;  // Assume this is a member variable like instanceBuffer
-    if (!rfuInstanceBuffer) {
-        wgpu::BufferDescriptor desc = {};
-        desc.usage = wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst;
-        desc.size = sizeof(InstanceData);
-        rfuInstanceBuffer = device.CreateBuffer(&desc);
-    }
+    // --- DRAW 2: The single "RFU" instance ---
+    // Update the data for the single instance
+    InstanceData rfuInstance = { {0.0f, 0.0f}, 1.0f, 0, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f) }; // Made it white to be visible
     device.GetQueue().WriteBuffer(rfuInstanceBuffer, 0, &rfuInstance, sizeof(InstanceData));
 
-    // ... (render pass setup, SetPipeline, SetBindGroup)
-
-    // Instanced draw (unchanged)
-    pass.SetVertexBuffer(0, mesh.getVertexBuffer());
-    pass.SetIndexBuffer(mesh.getIndexBuffer(), wgpu::IndexFormat::Uint32);
-    pass.SetVertexBuffer(1, instanceBuffer);
-    pass.DrawIndexed(mesh.getIndexCount(), instances.size(), 0, 0, 0);
-
-    // RFU draw: Update slot 1 to use the single-instance buffer
+    // Bind its geometry and single-instance buffer
     pass.SetVertexBuffer(0, mesh.getRfuVertexBuffer());
     pass.SetIndexBuffer(mesh.getRfuIndexBuffer(), wgpu::IndexFormat::Uint32);
-    pass.SetVertexBuffer(1, rfuInstanceBuffer);  // Key change: Bind rfu-specific instance data
-    pass.DrawIndexed(mesh.getRfuIndexCount(), 1, 0, 0, 0);
+    pass.SetVertexBuffer(1, rfuInstanceBuffer);
+    pass.DrawIndexed(mesh.getRfuIndexCount(), 1, 0, 0, 0); // Draw exactly one instance
 
-
-
-    // Vertex + Instance buffers
-    pass.SetVertexBuffer(0, mesh.getVertexBuffer());
-    pass.SetIndexBuffer(mesh.getIndexBuffer(), wgpu::IndexFormat::Uint32);
-    pass.SetVertexBuffer(1, instanceBuffer);
-
-    // One draw call for all instances
-    pass.DrawIndexed(mesh.getIndexCount(), instances.size(), 0, 0, 0);
-        // ... (existing code up to instanceBuffer write)
-
-    // New: Single instance data for rfu (customize color, offset, etc. as needed)
-  
+    // --- THE REDUNDANT DRAW CALL BLOCK HAS BEEN REMOVED ---
    
-    // ... (End, Finish, Submit)
+    // End the pass and submit
     pass.End();
     wgpu::CommandBuffer cmd = encoder.Finish();
     device.GetQueue().Submit(1, &cmd);
@@ -302,48 +276,82 @@ void InitGraphics() {
     .entries = &bgEntry
   };
   uniformBindGroup = device.CreateBindGroup(&bgDesc);
-  // wgpu::BindGroupEntry mDataBgEntry{
-  //     .binding = 0,
-  //     .buffer = mDataUniformBuffer,
-  //     .offset = 0,
-  //     .size = sizeof(MData)
-  // };
-  // wgpu::BindGroupDescriptor mDataBgDesc{
-  //   .layout = mDataGroupLayout,
-  //   .entryCount = 1,
-  //   .entries = &mDataBgEntry
-  // };
-  // mDataBindGroup = device.CreateBindGroup(&mDataBgDesc);
 
-  
-    for(float i=1;i<3;i++){
-    int mm=m-1;
-    float scale=pow(2,i*spacing-1);
-    int x=mm*(pow(2,i-1)-1);
-    int z=-mm*2*(pow(2,i-1)-1);
-    std::vector<InstanceData> instancesLOD = {
-    // --- Top row of blocks ---
-    { { mm*3+x+2,  z }, scale, 0 , glm::vec4(1.0f, 0.0f, 1.0f, 1.0f)},
-    { {mm*3+x+2,  mm*scale + z}, scale, 1 , glm::vec4(0.0f, 1.0f, 0.0f, 1.0f)},
-    { { mm*3+x+2,  mm*2+2 +x-mm*(scale-1) }, scale, 1 , glm::vec4(0.0f, 1.0f, 1.0f, 1.0f)},
-    { { mm*3+x+2,  mm*3+2+x }, scale, 1 , glm::vec4(1.0f, 1.0f, 0.4f, 1.0f)},
-    
-
-    { { mm*2+2+x-mm*(scale-1),  z }, scale, 0 , glm::vec4(0.8f, 0.5f, 1.0f, 1.0f)},
-    { { mm*2+2+x-mm*(scale-1),   mm*3+2+x }, scale, 1 , glm::vec4(0.8f, 0.3f, 0.4f, 1.0f)},
-
-
-    { { mm+z+ mm*(scale-1),  z  }, scale, 0 , glm::vec4(0.7f, 0.2f, 0.0f, 1.0f)},
-    { { mm+z+mm*(scale-1),  mm*3+2+x }, scale, 1 , glm::vec4(0.0f, 0.2f, 0.4f, 1.0f)},
-
-    { { z     ,  z}, scale, 0 , glm::vec4(1.0f, 0.0f, 1.0f, 1.0f)},
-    { { z,  z+mm*scale }, scale, 1 , glm::vec4(0.0f, 1.0f, 0.0f, 1.0f)},
-    { {z,  mm*2+2 +x-mm*(scale-1) }, scale, 1 , glm::vec4(0.0f, 1.0f, 1.0f, 1.0f)},
-    { { z,  mm*3+2+x }, scale, 1 , glm::vec4(1.0f, 1.0f, 0.4f, 1.0f)},
-    
-    // { { -2.0f * m,  1.5f * m }, 1, 1 , glm::vec4(0.0f, 0.0f, 1.0f, 1.0f)},
-    
+  int i=1;  
+  int mm=m-1;
+   
+  int x=0;
+  int xx=0;
+  int y=-1;
+  int topl;
+  int botl;
+  int midt;
+  int midb;
+  int midl;
+  int midr;
+  int right;
+  int left;
+  std::vector<glm::vec4> colors = {
+        {1.0f, 0.0f, 1.0f, 1.0f},
+        {0.0f, 1.0f, 0.0f, 1.0f},
+        {0.0f, 1.0f, 1.0f, 1.0f},
+        {1.0f, 1.0f, 0.4f, 1.0f},
+        {0.8f, 0.5f, 1.0f, 1.0f},
+        {0.8f, 0.3f, 0.4f, 1.0f},
+        {0.7f, 0.2f, 0.0f, 1.0f},
+        {0.0f, 0.2f, 0.4f, 1.0f},
+        {0.8f, 0.3f, 0.4f, 1.0f},
+        {0.7f, 0.2f, 0.0f, 1.0f},
+        {1.0f, 0.2f, 0.4f, 1.0f},
+        {0.0f, 1.0f, 0.4f, 1.0f}
     };
+    
+    
+    float scale=1;
+    for(i=1;i<4;i++){
+      x+=mm*scale;
+      xx+=mm*scale;
+      if(i%2==0)
+        x+=scale;
+      else
+        y+=scale;
+      
+        topl=mm*3+2+x;
+        botl=2*mm-xx+mm*(scale-1)-y;
+        midt=mm*2+2+x-mm*(scale-1);
+        midb=mm*2-y;
+        midl= mm*2+mm*(scale-1)-x;
+        midr= mm*2+2+y;
+        right=mm*3+2+mm*(scale-1)+y;
+        left=mm-x;
+
+        // std::cout<<"x: "<<x<<" y: "<<y<<" scale: "<<scale<<std::endl;
+        
+      
+
+      
+        std::vector<InstanceData> instancesLOD = {
+        // --- Top row of blocks ---
+        { { topl, left }, scale, 0 , colors[0]},
+        { { topl,midl}, scale, 1 , colors[1]},
+        { { topl, midr }, scale, 1 , colors[2]},
+        { { topl, right }, scale, 1 , colors[3]},
+
+        { { midt, left }, scale, 0 , colors[4]},
+        { { midt, right}, scale, 1 , colors[5]},
+
+        { { midb, left  }, scale, 0 , colors[6]},
+        { { midb, right}, scale, 1 , colors[7]},
+
+        { { botl, left}, scale, 0 , colors[8]},
+        { { botl,midl }, scale, 1 , colors[9]},
+        { { botl, midr }, scale, 1 , colors[10]},
+        { { botl, right }, scale, 1 , colors[11]},
+        
+        // { { -2.0f * m,  1.5f * m }, 1, 1 , glm::vec4(0.0f, 0.0f, 1.0f, 1.0f)},
+        
+    };
+      scale*=2;
       instances.insert(instances.end(), instancesLOD.begin(), instancesLOD.end());
   }
     // Create (or reuse) the instance buffer
@@ -355,7 +363,13 @@ void InitGraphics() {
     }
     device.GetQueue().WriteBuffer(instanceBuffer, 0, instances.data(), sizeof(InstanceData) * instances.size());
 
-
+     // Assume this is a member variable like instanceBuffer
+    if (!rfuInstanceBuffer) {
+        wgpu::BufferDescriptor desc = {};
+        desc.usage = wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst;
+        desc.size = sizeof(InstanceData);
+        rfuInstanceBuffer = device.CreateBuffer(&desc);
+    }
 }
 
 
@@ -479,7 +493,7 @@ void Start() {
 
     glfwPollEvents();
     Render();
-    surface.Present();00
+    surface.Present();
     instance.ProcessEvents();
   }
 #endif

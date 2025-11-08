@@ -26,8 +26,8 @@ wgpu::RenderPipeline pipeline;
 
 wgpu::Surface surface;
 wgpu::TextureFormat format;
-const uint32_t kWidth = 1000;
-const uint32_t kHeight = 800;
+const uint32_t kWidth = 1920;
+const uint32_t kHeight = 1080;
 
 
 // Camera 
@@ -40,17 +40,25 @@ const uint32_t kHeight = 800;
 #include <ShaderLoader.h>
 
 std::map<std::string, bool> keyStates;
-Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
+Camera camera(glm::vec3(0.0f, 30.0f, 0.0f));
 
 
 
 
 wgpu::Buffer uniformBuffer;
 wgpu::BindGroup uniformBindGroup;
+wgpu::Buffer rfuInstanceBuffer;
 
-wgpu::Buffer modelUniformBuffer ;
-wgpu::BindGroup modelBindGroup ;
+// MData
+struct MData {
+    glm::vec2 offset;  // 8 bytes
+    float scale;       // 4 bytes
+    uint32_t level;    // 4 bytes
 
+};
+
+wgpu::Buffer mDataUniformBuffer;
+wgpu::BindGroup mDataBindGroup;
 // mesh
 Mesh mesh;
 
@@ -65,18 +73,20 @@ float lastFrame = 0.0f;
 
 
 
-std::vector<Vertex> plane = {
-  {{-0.8f, -1.0f, 0.0f}},
-  {{ 1.0f, -1.0f, 0.0f}},
-  {{-1.0f,  1.0f, 0.0f}},
-  {{ 0.8f, 0.9f, 0.0f}},
-  
-};
+
 wgpu::Buffer vertexBuffer;
 UniformBinding uniformBinding;
 
+wgpu::Buffer instanceBuffer = nullptr;
 
-
+    // 2. Instance data
+    struct InstanceData {
+        glm::vec2 offset;
+        float scale;
+        uint32_t level;
+        glm::vec4 color;
+    };
+    std::vector<InstanceData> instances;
 
 
 void ConfigureSurface() {
@@ -134,125 +144,58 @@ void Init() {
   instance.WaitAny(f2, UINT64_MAX);
 }
 void Render() {
-    // 1. Standard Per-Frame Setup
-    //----------------------------------------------------------------
     wgpu::SurfaceTexture surfaceTexture;
     surface.GetCurrentTexture(&surfaceTexture);
 
+    // 1. Update camera uniform buffer
+    glm::mat4 view = camera.getViewMatrix(); 
+    glm::mat4 proj = glm::perspective(glm::radians(45.0f),
+                                      (float)kWidth / (float)kHeight,
+                                      0.1f, 100.0f);
+    glm::mat4 viewProj = proj * view;
+    device.GetQueue().WriteBuffer(uniformBuffer, 0, &viewProj, sizeof(glm::mat4));
 
     
+    // 2. Setup render pass
     wgpu::RenderPassColorAttachment attachment{
-      .view = surfaceTexture.texture.CreateView(),
-      .loadOp = wgpu::LoadOp::Clear,
-      .storeOp = wgpu::StoreOp::Store,
-      .clearValue = {0.1f, 0.2f, 0.3f, 1.0f} // A dark blue clear color
+        .view = surfaceTexture.texture.CreateView(),
+        .loadOp = wgpu::LoadOp::Clear,
+        .storeOp = wgpu::StoreOp::Store,
+        .clearValue = {0.1, 0.1, 0.15, 1.0}
     };
-
-    wgpu::RenderPassDescriptor renderpass{
-        .colorAttachmentCount = 1,
-        .colorAttachments = &attachment
-    };
+    wgpu::RenderPassDescriptor passDesc{.colorAttachmentCount = 1, .colorAttachments = &attachment};
 
     wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
-    wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderpass);
+    wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&passDesc);
 
-
-    // 2. Set Global State for the Entire Pass
-    //----------------------------------------------------------------
+    // Set pipeline and bind groups once for the entire pass
     pass.SetPipeline(pipeline);
-
-    // Compute and set the scene-wide camera matrix (Bind Group 0)
-    // This is done only ONCE per frame as it's the same for all objects.
-    glm::mat4 view = camera.getViewMatrix();
-    glm::mat4 projection = glm::perspective(glm::radians(45.0f), (float)kWidth / (float)kHeight, 0.1f, 100.0f);
-    glm::mat4 viewProjMatrix = projection * view;
-    device.GetQueue().WriteBuffer(uniformBuffer, 0, &viewProjMatrix, sizeof(glm::mat4));
     pass.SetBindGroup(0, uniformBindGroup);
+    
+    // --- DRAW 1: The main instanced mesh ---
+    pass.SetVertexBuffer(0, mesh.getVertexBuffer());
+    pass.SetIndexBuffer(mesh.getIndexBuffer(), wgpu::IndexFormat::Uint32);
+    pass.SetVertexBuffer(1, instanceBuffer);
+    pass.DrawIndexed(mesh.getIndexCount(), instances.size(), 0, 0, 0);
 
+    // --- DRAW 2: The single "RFU" instance ---
+    // Update the data for the single instance
+    InstanceData rfuInstance = { {0.0f, 0.0f}, 1.0f, 0, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f) }; // Made it white to be visible
+    device.GetQueue().WriteBuffer(rfuInstanceBuffer, 0, &rfuInstance, sizeof(InstanceData));
 
-    // 3. Assemble the Clipmap Ring, Piece by Piece
-    //----------------------------------------------------------------
+    // Bind its geometry and single-instance buffer
+    pass.SetVertexBuffer(0, mesh.getRfuVertexBuffer());
+    pass.SetIndexBuffer(mesh.getRfuIndexBuffer(), wgpu::IndexFormat::Uint32);
+    pass.SetVertexBuffer(1, rfuInstanceBuffer);
+    pass.DrawIndexed(mesh.getRfuIndexCount(), 1, 0, 0, 0); // Draw exactly one instance
 
-    // This 'm' value would come from your clipmap logic. We'll use a constant for this example.
-    const int m = 10;
-    // The size of a block in world units is determined by its vertex count and spacing.
-    // If spacing is 1.0, a block of 'm' vertices has a size of 'm - 1'.
-    const float blockSize = (m - 1.0f) * 1; // Assuming 'spacing' is a public member of Mesh
-
-
-    // --- A. Draw the 12 main (m x m) blocks (Gray in diagram) ---
-    const std::vector<glm::vec2> blockOffsets = {
-        {-1.5f,  1.5f}, {-0.5f,  1.5f}, {0.5f,  1.5f}, {1.5f,  1.5f}, // Top Row
-        {-1.5f, -1.5f}, {-0.5f, -1.5f}, {0.5f, -1.5f}, {1.5f, -1.5f}, // Bottom Row
-        {-1.5f,  0.5f}, { 1.5f,  0.5f},                               // Middle Left/Right
-        {-1.5f, -0.5f}, { 1.5f, -0.5f}
-    };
-
-    // Point the GPU to the vertex/index data for THIS type of mesh piece
-    pass.SetVertexBuffer(0, mesh.getVertexBuffer(), 0, mesh.getVertexCount() * sizeof(Vertex));
-    pass.SetIndexBuffer(mesh.getIndexBuffer(), wgpu::IndexFormat::Uint32, 0, mesh.getIndexCount() * sizeof(uint32_t));
-
-    for (const auto& offset : blockOffsets) {
-        glm::mat4 model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(offset.x * blockSize, 0.0f, offset.y * blockSize));
-
-        // Update the GPU buffer with the matrix for THIS specific block
-        device.GetQueue().WriteBuffer(modelUniformBuffer, 0, &model, sizeof(glm::mat4));
-
-        // Set Bind Group 1. This must be done for EACH draw call that uses a different model matrix.
-        pass.SetBindGroup(1, modelBindGroup);
-
-        pass.DrawIndexed(mesh.getIndexCount(), 1, 0, 0, 0);
-    }
-
-
-    // // --- B. Draw the 4 (m x 3) Ring Fix-up blocks (Green in diagram) ---
-    // // The offset distance is half the full ring width minus half a block width.
-    // // Full width = 4 blocks -> 2 * blockSize. Half width = blockSize.
-    // const float fixupDist = 2.0f * blockSize - (blockSize / 2.0f);
-
-    // // Transforms are {posX, posY, posZ, rotationY}
-    // const std::vector<glm::vec4> fixupTransforms = {
-    //     { 0.0f, 0.0f,  1.5f * blockSize,   0.0f}, // Top
-    //     { 0.0f, 0.0f, -1.5f * blockSize, 180.0f}, // Bottom
-    //     { 1.5f * blockSize, 0.0f,  0.0f,  -90.0f}, // Right
-    //     {-1.5f * blockSize, 0.0f,  0.0f,   90.0f}  // Left
-    // };
-
-    // // Switch to the vertex/index data for the fix-up mesh
-    // pass.SetVertexBuffer(0, mesh.getRfuVertexBuffer(), 0, mesh.getRfuVertexCount() * sizeof(Vertex));
-    // pass.SetIndexBuffer(mesh.getRfuIndexBuffer(), wgpu::IndexFormat::Uint32, 0, mesh.getRfuIndexCount() * sizeof(uint32_t));
-
-    // for (const auto& t : fixupTransforms) {
-    //     glm::mat4 model = glm::mat4(1.0f);
-    //     model = glm::translate(model, glm::vec3(t.x, t.y, t.z));
-    //     model = glm::rotate(model, glm::radians(t.w), glm::vec3(0.0f, 1.0f, 0.0f));
-
-    //     device.GetQueue().WriteBuffer(modelUniformBuffer, 0, &model, sizeof(glm::mat4));
-    //     pass.SetBindGroup(1, modelBindGroup);
-    //     pass.DrawIndexed(mesh.getRfuIndexCount(), 1, 0, 0, 0);
-    // }
-
-    // --- C. Draw the Interior Trim and other pieces ---
-    // You would continue the pattern here:
-    // 1. Define the transforms for the trim pieces.
-    // 2. Call pass.SetVertexBuffer() and pass.SetIndexBuffer() with the trim mesh data.
-    // 3. Loop through transforms, update model buffer, set bind group, and call DrawIndexed().
-    // ...
-
-
-    // 4. Finalize and Submit Commands
-    //----------------------------------------------------------------
+    // --- THE REDUNDANT DRAW CALL BLOCK HAS BEEN REMOVED ---
+   
+    // End the pass and submit
     pass.End();
-    wgpu::CommandBuffer commands = encoder.Finish();
-    device.GetQueue().Submit(1, &commands);
-
-    // For native applications that need to explicitly present
-    #if !defined(__EMSCRIPTEN__)
-        surface.Present();
-    #endif
+    wgpu::CommandBuffer cmd = encoder.Finish();
+    device.GetQueue().Submit(1, &cmd);
 }
-
 
 void InitGraphics() {
   ConfigureSurface();
@@ -281,18 +224,18 @@ void InitGraphics() {
   };
   wgpu::BindGroupLayout cameraBindGroupLayout = device.CreateBindGroupLayout(&bglDesc);
 
-  wgpu::BindGroupLayoutEntry modelBglEntry{
-      .binding = 0,
-      .visibility = wgpu::ShaderStage::Vertex,
-      .buffer.type = wgpu::BufferBindingType::Uniform,
-  };
-  wgpu::BindGroupLayoutDescriptor modelBglDesc{
-      .entryCount = 1,
-      .entries = &modelBglEntry
-  };
-  wgpu::BindGroupLayout modelBindGroupLayout = device.CreateBindGroupLayout(&modelBglDesc);
+  // wgpu::BindGroupLayoutEntry mDataBglEntry{
+  //     .binding = 0,
+  //     .visibility = wgpu::ShaderStage::Vertex,
+  //     .buffer.type = wgpu::BufferBindingType::Uniform,
+  // };
+  // wgpu::BindGroupLayoutDescriptor mDataDesc{
+  //     .entryCount = 1,
+  //     .entries = &mDataBglEntry
+  // };
+  // wgpu::BindGroupLayout mDataGroupLayout = device.CreateBindGroupLayout(&mDataDesc);
 
-  std::vector<wgpu::BindGroupLayout> bindGroupLayouts = {cameraBindGroupLayout, modelBindGroupLayout};
+  std::vector<wgpu::BindGroupLayout> bindGroupLayouts = {cameraBindGroupLayout};
 
   wgpu::PipelineLayoutDescriptor layoutDesc{
       .bindGroupLayoutCount = static_cast<uint32_t>(bindGroupLayouts.size()),
@@ -304,19 +247,27 @@ void InitGraphics() {
   PipelineConfig MeshConfig{};
   MeshConfig.surfaceFormat = format;
   MeshConfig.layout = pipelineLayout;
-  pipeline=Pipeline(device,MeshConfig,shaderCode).getPipeline();
-
+  try {
+      pipeline = Pipeline(device, MeshConfig, shaderCode).getPipeline();
+  } catch (const std::runtime_error& e) {
+      std::cerr << "Pipeline creation failed: " << e.what() << std::endl;
+  }
+  if (!pipeline) {
+      std::cerr << "Pipeline is invalid!" << std::endl;
+      exit(1);
+  }
 
   // BUFFER SETUP
   vertexBuffer = mesh.getVertexBuffer();
   uniformBuffer = BufferUtils::createUniformBuffer(device, sizeof(glm::mat4));
-
-  modelUniformBuffer = BufferUtils::createUniformBuffer(device, sizeof(glm::mat4));
+  std::cout << "Size of MData: " << sizeof(MData) << " bytes" << std::endl;
+  mDataUniformBuffer = BufferUtils::createUniformBuffer(device, sizeof(MData));
   
   // BIND GROUP SETUP
   wgpu::BindGroupEntry bgEntry{};
   bgEntry.binding = 0; // Corresponds to @binding(0) in shader
   bgEntry.buffer = uniformBuffer;
+  bgEntry.offset = 0;
   bgEntry.size = sizeof(glm::mat4);
 
   wgpu::BindGroupDescriptor bgDesc{
@@ -325,18 +276,96 @@ void InitGraphics() {
     .entries = &bgEntry
   };
   uniformBindGroup = device.CreateBindGroup(&bgDesc);
-  wgpu::BindGroupEntry modelBgEntry{
-  .binding = 0,
-  .buffer = modelUniformBuffer,
-  .size = sizeof(glm::mat4)
-  };
-  wgpu::BindGroupDescriptor modelBgDesc{
-    .layout = modelBindGroupLayout,
-    .entryCount = 1,
-    .entries = &modelBgEntry
-  };
-  modelBindGroup = device.CreateBindGroup(&modelBgDesc);
 
+  int i=1;  
+  int mm=m-1;
+   
+  int x=0;
+  int xx=0;
+  int y=-1;
+  int topl;
+  int botl;
+  int midt;
+  int midb;
+  int midl;
+  int midr;
+  int right;
+  int left;
+  std::vector<glm::vec4> colors = {
+        {1.0f, 0.0f, 1.0f, 1.0f},
+        {0.0f, 1.0f, 0.0f, 1.0f},
+        {0.0f, 1.0f, 1.0f, 1.0f},
+        {1.0f, 1.0f, 0.4f, 1.0f},
+        {0.8f, 0.5f, 1.0f, 1.0f},
+        {0.8f, 0.3f, 0.4f, 1.0f},
+        {0.7f, 0.2f, 0.0f, 1.0f},
+        {0.0f, 0.2f, 0.4f, 1.0f}
+    };
+    
+    
+    float scale=1;
+    for(i=1;i<4;i++){
+      x+=mm*scale;
+      xx+=mm*scale;
+      if(i%2==0)
+        x+=scale;
+      else
+        y+=scale;
+      
+        topl=mm*3+2+x;
+        botl=2*mm-xx+mm*(scale-1)-y;
+        midt=mm*2+2+x-mm*(scale-1);
+        midb=mm*2-y;
+        midl= mm*2+mm*(scale-1)-x;
+        midr= mm*2+2+y;
+        right=mm*3+2+mm*(scale-1)+y;
+        left=mm-x;
+
+        // std::cout<<"x: "<<x<<" y: "<<y<<" scale: "<<scale<<std::endl;
+        
+      
+
+      
+        std::vector<InstanceData> instancesLOD = {
+        // --- Top row of blocks ---
+        { { topl, left }, scale, 0 , colors[0]},
+        { { topl,midl}, scale, 1 , colors[1]},
+        { { topl, midr }, scale, 1 , colors[2]},
+        { { topl, right }, scale, 1 , colors[3]},
+
+        { { midt, left }, scale, 0 , colors[4]},
+        { { midt, right}, scale, 1 , colors[5]},
+
+        { { midb, left  }, scale, 0 , colors[6]},
+        { { midb, right}, scale, 1 , colors[7]},
+
+        { { botl, left}, scale, 0 , colors[8]},
+        { { botl,midl }, scale, 1 , colors[9]},
+        { { botl, midr }, scale, 1 , colors[10]},
+        { { botl, right }, scale, 1 , colors[11]},
+        
+        // { { -2.0f * m,  1.5f * m }, 1, 1 , glm::vec4(0.0f, 0.0f, 1.0f, 1.0f)},
+        
+    };
+      scale*=2;
+      instances.insert(instances.end(), instancesLOD.begin(), instancesLOD.end());
+  }
+    // Create (or reuse) the instance buffer
+    if (!instanceBuffer) {
+        wgpu::BufferDescriptor desc = {};
+        desc.usage = wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst;
+        desc.size = sizeof(InstanceData) * instances.size();
+        instanceBuffer = device.CreateBuffer(&desc);
+    }
+    device.GetQueue().WriteBuffer(instanceBuffer, 0, instances.data(), sizeof(InstanceData) * instances.size());
+
+     // Assume this is a member variable like instanceBuffer
+    if (!rfuInstanceBuffer) {
+        wgpu::BufferDescriptor desc = {};
+        desc.usage = wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst;
+        desc.size = sizeof(InstanceData);
+        rfuInstanceBuffer = device.CreateBuffer(&desc);
+    }
 }
 
 
@@ -460,7 +489,7 @@ void Start() {
 
     glfwPollEvents();
     Render();
-    surface.Present();00
+    surface.Present();
     instance.ProcessEvents();
   }
 #endif
@@ -486,56 +515,4 @@ int main() {
   //   }
   Init();
   Start();
-}
-
-// This struct defines the format of the vertex data that we send from the CPU.
-// It must match the layout of the `Vertex` struct in your C++ code.
-struct VertexInput {
-    // @location(0) corresponds to the first attribute in the vertex buffer layout.
-    @location(0) position: vec3f,
-};
-
-// This struct holds the camera's view and projection matrices, combined into one.
-// This data is the same for every object drawn in a single frame.
-struct CameraUniforms {
-    view_projection_matrix: mat4x4<f32>,
-};
-
-// NEW: This struct holds the per-object model matrix.
-// This will change for each individual piece of the clipmap ring we draw.
-struct ModelUniforms {
-    model_matrix: mat4x4<f32>,
-};
-
-// This uniform variable will get its data from the buffer bound at group 0, binding 0.
-// In C++, this is your `uniformBindGroup`.
-@group(0) @binding(0)
-var<uniform> camera: CameraUniforms;
-
-// NEW: This uniform variable gets its data from the buffer bound at group 1, binding 0.
-// In C++, this is your `modelBindGroup`. It now correctly expects a 4x4 matrix.
-@group(1) @binding(0)
-var<uniform> model: ModelUniforms;
-
-
-@vertex
-fn vertexMain(input: VertexInput) -> @builtin(position) vec4f {
-    // 1. Convert the input vertex position (vec3f) to a homogeneous coordinate (vec4f).
-    //    The 'w' component of 1.0 is used for position vectors.
-    let model_position = vec4f(input.position, 1.0);
-
-    // 2. Transform the vertex from its local model space into world space
-    //    by multiplying it with the per-object model matrix.
-    let world_position = model.model_matrix * model_position;
-
-    // 3. Transform the world space position into final clip space
-    //    by multiplying it with the camera's view-projection matrix.
-    //    This is the final position that will be rendered.
-    return camera.view_projection_matrix * world_position;
-}
-
-@fragment
-fn fragmentMain() -> @location(0) vec4f {
-  // Return a solid color for the fragment (e.g., a nice orange).
-  return vec4f(1.0, 0.5, 0.0, 1.0);
 }
