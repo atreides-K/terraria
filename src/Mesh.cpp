@@ -7,28 +7,41 @@ void Mesh::operator()(const wgpu::Device& device){
     std::vector<Vertex> mesh = createSmallMesh();
     m_vertexBuffer=BufferUtils::createVertexBuffer(device,mesh);
     m_vertexCount=static_cast<uint32_t>(mesh.size());
-    std::vector<uint32_t> indices=createIndices();
+    // std::vector<uint32_t> indices=createIndices();
+    std::vector<uint32_t> indices=createIndicesT(m,m);
     m_indexCount=static_cast<uint32_t>(indices.size());
     m_indexBuffer = BufferUtils::createIndexBuffer(device,indices);
 
-    std::vector<Vertex> rfu = createMesh(m*4-1, m*4-1);
+    std::vector<Vertex> rfu = createSmallMesh(m,3);
     rfu_vertexBuffer=BufferUtils::createVertexBuffer(device,rfu);
     rfu_vertexCount=static_cast<uint32_t>(rfu.size());
-    indices=createIndices(m*4-1,m*4-1);
+    // indices=createIndices(3,m);
+    indices=createIndicesT(m,3);
     rfu_indexCount=static_cast<uint32_t>(indices.size());
     rfu_indexBuffer = BufferUtils::createIndexBuffer(device,indices);
+
+    std::vector<Vertex> rfuH = createSmallMesh(3,m);
+    rfuH_vertexBuffer=BufferUtils::createVertexBuffer(device,rfuH);
+    rfuH_vertexCount=static_cast<uint32_t>(rfuH.size());
+    // indices=createIndices(m,3);
+    indices=createIndicesT(3,m);
+    rfuH_indexCount=static_cast<uint32_t>(indices.size());
+    rfuH_indexBuffer = BufferUtils::createIndexBuffer(device,indices);
+
 
     std::vector<Vertex> trim = createLMesh(m*2+1);
     trim_vertexBuffer=BufferUtils::createVertexBuffer(device,trim);
     trim_vertexCount=static_cast<uint32_t>(trim.size());
-    indices=createLIndices_wf(m*2+1,2);
+    // indices=createLIndices_wf(m*2+1,2);
+    indices=createIndicesT(m*2+1,2);
     trim_indexCount=static_cast<uint32_t>(indices.size());
     trim_indexBuffer = BufferUtils::createIndexBuffer(device,indices);
     
     std::vector<Vertex> trimH = createSmallMesh(2,m*2+1);
     trimH_vertexBuffer=BufferUtils::createVertexBuffer(device,trimH);
     trimH_vertexCount=static_cast<uint32_t>(trimH.size());
-    indices=createIndices(m*2+1,2);
+    // indices=createIndices(m*2+1,2);
+    indices=createIndicesT(2,m*2+1);
     trimH_indexCount=static_cast<uint32_t>(indices.size());
     trimH_indexBuffer = BufferUtils::createIndexBuffer(device,indices);
 }
@@ -61,6 +74,22 @@ uint32_t Mesh::getRfuVertexCount() const{
 
 uint32_t Mesh::getRfuIndexCount() const{
     return rfu_indexCount;
+}
+
+wgpu::Buffer Mesh::getRfuHVertexBuffer() const{
+    return rfuH_vertexBuffer;
+}
+
+wgpu::Buffer Mesh::getRfuHIndexBuffer() const{
+    return rfuH_indexBuffer;
+}
+
+uint32_t Mesh::getRfuHVertexCount() const{
+    return rfuH_vertexCount;
+}
+
+uint32_t Mesh::getRfuHIndexCount() const{
+    return rfuH_indexCount;
 }
 
 wgpu::Buffer Mesh::getTrimVertexBuffer() const{
@@ -146,17 +175,22 @@ std::vector<Vertex> Mesh::createLMesh(const int& m){
         return mesh;
     }
 
-// std::vector<uint32_t> Mesh::createIndices(const int& h,const int& w){
-//     std::vector<uint32_t> indices;
-//     for(int i=0;i<w-1;i++){
-//         for(int j=0;j<h-1;j++){
-//             // should form triandgle in patter 1234 -> 123 234 firm triangles 
-//             indices.push_back(i*h + j);
-//             indices.push_back((i+1)*h + j);
-//         }
-//     }
-//     return indices;
-// }
+std::vector<uint32_t> Mesh::createIndicesT(const int& h,const int& w){
+    std::vector<uint32_t> indices;
+    for(int i=0;i<h-1;i++){
+        if(i!=0){
+            indices.push_back((i+1)*w -1);
+            indices.push_back(i*w);
+        }
+        for(int j=0;j<w;j++){
+            // should form triandgle in patter 1234 -> 123 234 firm triangles 
+            indices.push_back(i*w + j);
+            indices.push_back((i+1)*w + j);
+        }
+        
+    }
+    return indices;
+}
 std::vector<uint32_t> Mesh::createIndices(const int& h,const int& w){
     std::vector<uint32_t> indices;
     for(int i=0;i<w-1;i++){

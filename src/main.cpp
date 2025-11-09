@@ -48,19 +48,11 @@ Camera camera(glm::vec3(0.0f, 30.0f, 0.0f));
 wgpu::Buffer uniformBuffer;
 wgpu::BindGroup uniformBindGroup;
 wgpu::Buffer rfuInstanceBuffer;
+wgpu::Buffer rfuHInstanceBuffer;
 wgpu::Buffer LInstanceBuffer;
 wgpu::Buffer LHInstanceBuffer;
 
-// MData
-struct MData {
-    glm::vec2 offset;  // 8 bytes
-    float scale;       // 4 bytes
-    uint32_t level;    // 4 bytes
 
-};
-
-wgpu::Buffer mDataUniformBuffer;
-wgpu::BindGroup mDataBindGroup;
 // mesh
 Mesh mesh;
 
@@ -91,7 +83,8 @@ wgpu::Buffer instanceBuffer = nullptr;
     std::vector<InstanceData> instances;
     std::vector<InstanceData> LHInstances;
     std::vector<InstanceData> LInstances;
-
+    std::vector<InstanceData> rfuInstances;
+    std::vector<InstanceData> rfuHInstances;
 
 void ConfigureSurface() {
   wgpu::SurfaceCapabilities capabilities;
@@ -184,15 +177,17 @@ void Render() {
 
     // --- DRAW 2: The single "RFU" instance ---
     // Update the data for the single instance
-    // InstanceData rfuInstance = { {0.0f, 0.0f}, 1.0f, 0, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f) }; // Made it white to be visible
-    // device.GetQueue().WriteBuffer(rfuInstanceBuffer, 0, &rfuInstance, sizeof(InstanceData));
+   
+    // Bind its geometry and single-instance buffer
+    pass.SetVertexBuffer(0, mesh.getRfuVertexBuffer());
+    pass.SetIndexBuffer(mesh.getRfuIndexBuffer(), wgpu::IndexFormat::Uint32);
+    pass.SetVertexBuffer(1, rfuInstanceBuffer);
+    pass.DrawIndexed(mesh.getRfuIndexCount(), rfuInstances.size(), 0, 0, 0); 
 
-    // // Bind its geometry and single-instance buffer
-    // pass.SetVertexBuffer(0, mesh.getRfuVertexBuffer());
-    // pass.SetIndexBuffer(mesh.getRfuIndexBuffer(), wgpu::IndexFormat::Uint32);
-    // pass.SetVertexBuffer(1, rfuInstanceBuffer);
-    // pass.DrawIndexed(mesh.getRfuIndexCount(), 1, 0, 0, 0); // Draw exactly one instance
-    
+    pass.SetVertexBuffer(0, mesh.getRfuHVertexBuffer());
+    pass.SetIndexBuffer(mesh.getRfuHIndexBuffer(), wgpu::IndexFormat::Uint32);
+    pass.SetVertexBuffer(1, rfuHInstanceBuffer);
+    pass.DrawIndexed(mesh.getRfuHIndexCount(), rfuHInstances.size(), 0, 0, 0); 
 
   
     // Draw L-shaped trim mesh
@@ -277,8 +272,8 @@ void InitGraphics() {
   // BUFFER SETUP
   vertexBuffer = mesh.getVertexBuffer();
   uniformBuffer = BufferUtils::createUniformBuffer(device, sizeof(glm::mat4));
-  std::cout << "Size of MData: " << sizeof(MData) << " bytes" << std::endl;
-  mDataUniformBuffer = BufferUtils::createUniformBuffer(device, sizeof(MData));
+  // std::cout << "Size of MData: " << sizeof(MData) << " bytes" << std::endl;
+  // mDataUniformBuffer = BufferUtils::createUniformBuffer(device, sizeof(MData));
   
   // BIND GROUP SETUP
   wgpu::BindGroupEntry bgEntry{};
@@ -320,19 +315,37 @@ void InitGraphics() {
         {0.8f, 0.3f, 0.4f, 1.0f},
         {0.7f, 0.2f, 0.0f, 1.0f},
         {1.0f, 0.2f, 0.4f, 1.0f},
-        {0.0f, 1.0f, 0.4f, 1.0f}
+        {0.0f, 1.0f, 0.4f, 1.0f},
+        {1.0f, 1.0f, 1.0f, 1.0f}
     };
     
 
     
     float scale=1;
-    for(i=1;i<10;i++){
+    
+
+    std::vector<InstanceData> instancesLOD ={
+        { { mm*3+1,mm+1 }, scale, 0 , colors[8]},
+        { { mm*3+1,mm*2+1 }, scale, 1 , colors[9]},
+        { { mm*2+1, mm+1 }, scale, 1 , colors[10]},
+        { { mm*2+1, mm*2+1 }, scale, 1 , colors[11]},
+        
+        // { { -2.0f * m,  1.5f * m }, 1, 1 , glm::vec4(0.0f, 0.0f, 1.0f, 1.0f)},
+        
+    };
+    
+    instances.insert(instances.end(), instancesLOD.begin(), instancesLOD.end());
+
+    InstanceData LInstance={{mm*3+2,mm},scale,0,colors[12]};
+    LHInstances.push_back(LInstance);
+    LInstance={{mm,mm+1},scale,0,colors[12]};
+    LInstances.push_back(LInstance);
+    for(i=1;i<12;i++){
       x+=mm*scale;
       xx+=mm*scale;
       if(i%2==0)
         x+=scale;
       else{
-
         y+=scale;
       }
       
@@ -351,14 +364,24 @@ void InitGraphics() {
           InstanceData LInstance = { {botl,midl+scale}, scale, 0, colors[2] }; // Made it white to be visible
           LInstances.push_back(LInstance);
         }
-           else{
-                InstanceData LHInstance = { {botl+scale, midl}, scale, 0, colors[0] }; // Made it white to be visible
-              LHInstances.push_back(LHInstance);
+        else{
+          InstanceData LHInstance = { {botl+scale, midl}, scale, 0, colors[0] };
+          LHInstances.push_back(LHInstance);
 
-            InstanceData LInstance = { {botl,right}, scale, 0, colors[2] }; // Made it white to be visible
+          InstanceData LInstance = { {botl,right}, scale, 0, colors[2] };
           LInstances.push_back(LInstance);
 
         }
+
+        InstanceData rfuInstance = { {topl, midr-scale*2}, scale, 0, colors[1] };
+        rfuInstances.push_back(rfuInstance);
+        rfuInstance = { {botl, midr-scale*2}, scale, 0, colors[1] };
+        rfuInstances.push_back(rfuInstance);
+
+        InstanceData rfuHInstance = { {midb+scale*2, left}, scale, 0, colors[12] };
+        rfuHInstances.push_back(rfuHInstance);
+        rfuHInstance = { {midb+scale*2, right}, scale, 0, colors[12] };
+        rfuHInstances.push_back(rfuHInstance);
         // std::cout<<"x: "<<x<<" y: "<<y<<" scale: "<<scale<<std::endl;
 
       
@@ -400,9 +423,24 @@ void InitGraphics() {
     if (!rfuInstanceBuffer) {
         wgpu::BufferDescriptor desc = {};
         desc.usage = wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst;
-        desc.size = sizeof(InstanceData);
+        desc.size = sizeof(InstanceData)
+        * rfuInstances.size();
         rfuInstanceBuffer = device.CreateBuffer(&desc);
     }
+
+    device.GetQueue().WriteBuffer(rfuInstanceBuffer, 0, rfuInstances.data(), sizeof(InstanceData) * rfuInstances.size());
+
+    if (!rfuHInstanceBuffer) {
+        wgpu::BufferDescriptor desc = {};
+        desc.usage = wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst;
+        desc.size = sizeof(InstanceData)
+        * rfuHInstances.size();
+        rfuHInstanceBuffer = device.CreateBuffer(&desc);
+    }
+
+    device.GetQueue().WriteBuffer(rfuHInstanceBuffer, 0, rfuHInstances.data(), sizeof(InstanceData) * rfuHInstances.size());
+
+
     if (!LInstanceBuffer) {
         wgpu::BufferDescriptor desc = {};
         desc.usage = wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst;

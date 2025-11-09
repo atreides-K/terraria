@@ -9,7 +9,7 @@
 #include "BufferUtils.h"
 
 // int x=11;
-const int m=4;
+const int m=64;
 const float spacing = 1.0f;
 
 
@@ -29,11 +29,18 @@ public:
     uint32_t getVertexCount() const;
     uint32_t getIndexCount() const;
 
-    // New getter methods for the additional mesh types
+    // RFU_V 
     wgpu::Buffer getRfuVertexBuffer() const;
     wgpu::Buffer getRfuIndexBuffer() const;
     uint32_t getRfuVertexCount() const;
     uint32_t getRfuIndexCount() const;
+
+    // RFU_H
+    wgpu::Buffer getRfuHVertexBuffer() const;
+    wgpu::Buffer getRfuHIndexBuffer() const;
+    uint32_t getRfuHVertexCount() const;
+    uint32_t getRfuHIndexCount() const;
+
 
     wgpu::Buffer getTrimVertexBuffer() const;
     wgpu::Buffer getTrimIndexBuffer() const;
@@ -59,6 +66,11 @@ private:
     uint32_t rfu_vertexCount = 0;
     uint32_t rfu_indexCount = 0;
 
+    wgpu::Buffer rfuH_vertexBuffer;
+    wgpu::Buffer rfuH_indexBuffer;
+    uint32_t rfuH_vertexCount = 0;
+    uint32_t rfuH_indexCount = 0;
+
      // trim
     wgpu::Buffer trim_vertexBuffer;
     wgpu::Buffer trim_indexBuffer;
@@ -75,4 +87,5 @@ private:
     std::vector<uint32_t> createIndices(const int& h=m,const int& w=m);
     std::vector<Vertex> createLMesh(const int& h=m);
     std::vector<uint32_t> createLIndices_wf(const int& h=m,const int& w=2);
+    std::vector<uint32_t> createIndicesT(const int& h=m,const int& w=m);
 };               

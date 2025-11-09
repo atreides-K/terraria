@@ -29,7 +29,7 @@ Pipeline::Pipeline(
 
     wgpu::PrimitiveState primitiveState{
         .topology = config.topology,
-        // .stripIndexFormat = config.indexFormat,
+        .stripIndexFormat = config.indexFormat,
         
     };
     
