@@ -26,9 +26,9 @@ fn vertexMain(input: VertexInput) -> VSOutput {
 
     // Apply per-instance transform
     let pos = vec3f(
-        (input.position.x * input.scale + input.offset.x)*0.2,
+        (input.position.x * input.scale + input.offset.x)*0.01,
         input.position.y,
-        (input.position.z * input.scale + input.offset.y)*0.2
+        (input.position.z * input.scale + input.offset.y)*0.01
     );
 
     out.position = camera.view_projection_matrix * vec4f(pos, 1.0);

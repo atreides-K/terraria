@@ -48,6 +48,8 @@ Camera camera(glm::vec3(0.0f, 30.0f, 0.0f));
 wgpu::Buffer uniformBuffer;
 wgpu::BindGroup uniformBindGroup;
 wgpu::Buffer rfuInstanceBuffer;
+wgpu::Buffer LInstanceBuffer;
+wgpu::Buffer LHInstanceBuffer;
 
 // MData
 struct MData {
@@ -87,6 +89,8 @@ wgpu::Buffer instanceBuffer = nullptr;
         glm::vec4 color;
     };
     std::vector<InstanceData> instances;
+    std::vector<InstanceData> LHInstances;
+    std::vector<InstanceData> LInstances;
 
 
 void ConfigureSurface() {
@@ -180,17 +184,30 @@ void Render() {
 
     // --- DRAW 2: The single "RFU" instance ---
     // Update the data for the single instance
-    InstanceData rfuInstance = { {0.0f, 0.0f}, 1.0f, 0, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f) }; // Made it white to be visible
-    device.GetQueue().WriteBuffer(rfuInstanceBuffer, 0, &rfuInstance, sizeof(InstanceData));
+    // InstanceData rfuInstance = { {0.0f, 0.0f}, 1.0f, 0, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f) }; // Made it white to be visible
+    // device.GetQueue().WriteBuffer(rfuInstanceBuffer, 0, &rfuInstance, sizeof(InstanceData));
 
-    // Bind its geometry and single-instance buffer
-    pass.SetVertexBuffer(0, mesh.getRfuVertexBuffer());
-    pass.SetIndexBuffer(mesh.getRfuIndexBuffer(), wgpu::IndexFormat::Uint32);
-    pass.SetVertexBuffer(1, rfuInstanceBuffer);
-    pass.DrawIndexed(mesh.getRfuIndexCount(), 1, 0, 0, 0); // Draw exactly one instance
+    // // Bind its geometry and single-instance buffer
+    // pass.SetVertexBuffer(0, mesh.getRfuVertexBuffer());
+    // pass.SetIndexBuffer(mesh.getRfuIndexBuffer(), wgpu::IndexFormat::Uint32);
+    // pass.SetVertexBuffer(1, rfuInstanceBuffer);
+    // pass.DrawIndexed(mesh.getRfuIndexCount(), 1, 0, 0, 0); // Draw exactly one instance
+    
 
-    // --- THE REDUNDANT DRAW CALL BLOCK HAS BEEN REMOVED ---
-   
+  
+    // Draw L-shaped trim mesh
+    pass.SetVertexBuffer(0, mesh.getTrimVertexBuffer());
+    pass.SetIndexBuffer(mesh.getTrimIndexBuffer(), wgpu::IndexFormat::Uint32);
+    pass.SetVertexBuffer(1, LInstanceBuffer);
+    pass.DrawIndexed(mesh.getTrimIndexCount(), LInstances.size(), 0, 0, 0); // Draw exactly one instance
+
+    // device.GetQueue().WriteBuffer(LHInstanceBuffer, 0, LHInstances.data(), sizeof(InstanceData) * LHInstances.size());
+    // Draw L-shaped trim mesh
+    pass.SetVertexBuffer(0, mesh.getTrimHVertexBuffer());
+    pass.SetIndexBuffer(mesh.getTrimHIndexBuffer(), wgpu::IndexFormat::Uint32);
+    pass.SetVertexBuffer(1, LHInstanceBuffer);
+    pass.DrawIndexed(mesh.getTrimHIndexCount(), LHInstances.size(), 0, 0, 0); // Draw exactly one instance
+
     // End the pass and submit
     pass.End();
     wgpu::CommandBuffer cmd = encoder.Finish();
@@ -306,15 +323,18 @@ void InitGraphics() {
         {0.0f, 1.0f, 0.4f, 1.0f}
     };
     
+
     
     float scale=1;
-    for(i=1;i<4;i++){
+    for(i=1;i<10;i++){
       x+=mm*scale;
       xx+=mm*scale;
       if(i%2==0)
         x+=scale;
-      else
+      else{
+
         y+=scale;
+      }
       
         topl=mm*3+2+x;
         botl=2*mm-xx+mm*(scale-1)-y;
@@ -324,11 +344,24 @@ void InitGraphics() {
         midr= mm*2+2+y;
         right=mm*3+2+mm*(scale-1)+y;
         left=mm-x;
+        if(i%2==0){
+          InstanceData LHInstance = { {midt, midl}, scale, 0, colors[0] }; // Made it white to be visible
+              LHInstances.push_back(LHInstance);
 
+          InstanceData LInstance = { {botl,midl+scale}, scale, 0, colors[2] }; // Made it white to be visible
+          LInstances.push_back(LInstance);
+        }
+           else{
+                InstanceData LHInstance = { {botl+scale, midl}, scale, 0, colors[0] }; // Made it white to be visible
+              LHInstances.push_back(LHInstance);
+
+            InstanceData LInstance = { {botl,right}, scale, 0, colors[2] }; // Made it white to be visible
+          LInstances.push_back(LInstance);
+
+        }
         // std::cout<<"x: "<<x<<" y: "<<y<<" scale: "<<scale<<std::endl;
-        
-      
 
+      
       
         std::vector<InstanceData> instancesLOD = {
         // --- Top row of blocks ---
@@ -370,6 +403,21 @@ void InitGraphics() {
         desc.size = sizeof(InstanceData);
         rfuInstanceBuffer = device.CreateBuffer(&desc);
     }
+    if (!LInstanceBuffer) {
+        wgpu::BufferDescriptor desc = {};
+        desc.usage = wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst;
+        desc.size = sizeof(InstanceData)* LInstances.size();
+        LInstanceBuffer = device.CreateBuffer(&desc);
+    }
+    device.GetQueue().WriteBuffer(LInstanceBuffer, 0, LInstances.data(), sizeof(InstanceData) * LInstances.size());
+    if (!LHInstanceBuffer) {
+        wgpu::BufferDescriptor desc = {};
+        desc.usage = wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst;
+        desc.size = sizeof(InstanceData)* LHInstances.size();
+        LHInstanceBuffer = device.CreateBuffer(&desc);
+    }
+    device.GetQueue().WriteBuffer(LHInstanceBuffer, 0, LHInstances.data(), sizeof(InstanceData) * LHInstances.size());
+
 }
 
 

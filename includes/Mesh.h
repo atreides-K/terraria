@@ -9,7 +9,7 @@
 #include "BufferUtils.h"
 
 // int x=11;
-const int m=64;
+const int m=4;
 const float spacing = 1.0f;
 
 
@@ -40,6 +40,12 @@ public:
     uint32_t getTrimVertexCount() const;
     uint32_t getTrimIndexCount() const;
 
+    uint32_t getTrimHVertexCount() const;
+    uint32_t getTrimHIndexCount() const;
+    wgpu::Buffer getTrimHVertexBuffer() const;
+    wgpu::Buffer getTrimHIndexBuffer() const;
+
+
 private:
     // Private member variables. The Mesh object owns these resources.
     wgpu::Buffer m_vertexBuffer;
@@ -58,7 +64,15 @@ private:
     wgpu::Buffer trim_indexBuffer;
     uint32_t trim_vertexCount = 0;
     uint32_t trim_indexCount = 0;
+
+    uint32_t trimH_vertexCount = 0;
+    uint32_t trimH_indexCount = 0;
+    wgpu::Buffer trimH_vertexBuffer;
+    wgpu::Buffer trimH_indexBuffer;
+
     std::vector<Vertex> createMesh(const int& h=m,const int& w=m);
     std::vector<Vertex> createSmallMesh(const int& h=m,const int& w=m);
     std::vector<uint32_t> createIndices(const int& h=m,const int& w=m);
+    std::vector<Vertex> createLMesh(const int& h=m);
+    std::vector<uint32_t> createLIndices_wf(const int& h=m,const int& w=2);
 };               
