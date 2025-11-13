@@ -15,7 +15,7 @@ struct PipelineConfig{
     wgpu::PipelineLayout layout;
     std::string shaderCode;
     // wgpu::PrimitiveTopology topology=wgpu::PrimitiveTopology::LineList;
-    wgpu::PrimitiveTopology topology=wgpu::PrimitiveTopology::TriangleStrip;
+    wgpu::PrimitiveTopology topology=wgpu::PrimitiveTopology::LineStrip;
     
     wgpu::IndexFormat indexFormat=wgpu::IndexFormat::Uint32;
 };

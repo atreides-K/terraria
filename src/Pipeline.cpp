@@ -30,7 +30,8 @@ Pipeline::Pipeline(
     wgpu::PrimitiveState primitiveState{
         .topology = config.topology,
         .stripIndexFormat = config.indexFormat,
-        
+        .frontFace = wgpu::FrontFace::CCW,
+        .cullMode = wgpu::CullMode::None
     };
     
 
@@ -60,8 +61,8 @@ wgpu::VertexState Pipeline::createVertexPipelineLayout(
 
     // FIX: Reordered initializers to match declaration order
     layoutData.vertexBufferLayout = {
-        .arrayStride = sizeof(Vertex), 
         .stepMode = wgpu::VertexStepMode::Vertex,
+        .arrayStride = sizeof(Vertex), 
         .attributeCount = 1,
         .attributes = layoutData.vertexAttributes
     };

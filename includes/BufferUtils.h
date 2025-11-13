@@ -17,6 +17,12 @@ struct UniformBinding{
     wgpu::BindGroupLayout bindGroupLayout;
 };
 
+struct terrainUniforms{
+    float heightScale;
+    float terrainWidth;
+    float terrainHeight;
+};
+
 // for vertex buffer
 struct Vertex{
     float position[3];

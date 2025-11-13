@@ -2,8 +2,19 @@
 struct CameraUniforms {
     view_projection_matrix: mat4x4<f32>,
 };
+
+struct TerrainUniforms{
+    heightScale: f32,
+    terrainWidth: f32,
+    terrainHeight: f32,
+};
+
 @group(0) @binding(0)
 var<uniform> camera: CameraUniforms;
+
+@group(1) @binding(0) var lodTextures: texture_2d_array<f32>;
+@group(1) @binding(1) var lodSampler: sampler;
+@group(1) @binding(2) var<uniform> terrainData: TerrainUniforms;
 
 // Per-instance data now comes from vertex attributes
 struct VertexInput {
@@ -24,17 +35,24 @@ struct VSOutput {
 fn vertexMain(input: VertexInput) -> VSOutput {
     var out : VSOutput;
 
+    
+    let world_xz = (input.position.xz * input.scale + input.offset);
+
+// Normalize the world coordinates and shift the origin to the center of the texture
+    let uv = (world_xz  / vec2f(terrainData.terrainWidth, terrainData.terrainHeight)) + vec2f(0.5, 0.5);
+
+    let height=textureSampleLevel(lodTextures, lodSampler, uv, input.level,0.0f).r;
     // Apply per-instance transform
-    let pos = vec3f(
-        (input.position.x * input.scale + input.offset.x)*0.1,
-        input.position.y,
-        (input.position.z * input.scale + input.offset.y)*0.1
+     let final_world_pos = vec3f(
+        world_xz.x,
+        height * 0.1,
+        world_xz.y
     );
 
-    out.position = camera.view_projection_matrix * vec4f(pos, 1.0);
+    out.position = camera.view_projection_matrix * vec4f(final_world_pos, 1.0);
 
     // Simple color based on instance index
-    let hue = f32(input.instanceIdx) / 4.0; // assuming 4 instances
+    // let hue = f32(input.instanceIdx) / 4.0; // assuming 4 instances
     out.color = input.color;
 
     return out;

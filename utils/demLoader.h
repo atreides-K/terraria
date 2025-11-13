@@ -1,34 +1,32 @@
 #pragma once
-#include <vector>
-#include <iostream>
-#include <fstream>
-#include <cstdint>
-#include <sstream>
-#include <unordered_map>
 
+#include <string>
+#include <vector>
+#include <map>
+#include <fstream>
+#include <iostream>
+
+// A simple struct to hold the raw heightmap data on the CPU
 struct Heightmap {
-    int width;
-    int height;
+    int width = 0;
+    int height = 0;
     std::vector<float> data;
 };
 
-
 class DEMLoader {
-    public:
-        DEMLoader(const std::string& rawFile,const std::string& hdrFile);
+public:
+    DEMLoader(const std::string& rawFile, const std::string& hdrFile);
 
-        std::vector<std::vector<float>> getElevationData() const;
+    int getWidth() const;
+    int getHeight() const;
+    const Heightmap& getHeightmap() const; // <-- Public getter for the data
 
-        Heightmap loadENVI(const std::string& rawFile);
+private:
+    void parseENVIHeader(const std::string& hdrFile);
+    void loadENVI(const std::string& rawFile); // <-- Changed to void
 
-        void parseENVIHeader(const std::string& hdrFile);
-
-        int getWidth() const;
-        
-        int getHeight() const;
-    private:
-        std::vector<std::vector<float>> elevationData;
-        std::unordered_map<std::string, std::string> DEMMetadata;
-        int width;
-        int height;
+    int width = 0;
+    int height = 0;
+    std::map<std::string, std::string> DEMMetadata;
+    Heightmap m_heightmap; // <-- Stores the loaded data
 };

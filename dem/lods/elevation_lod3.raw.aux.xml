@@ -1,0 +1,24 @@
+<PAMDataset>
+  <Metadata domain="IMAGE_STRUCTURE">
+    <MDI key="INTERLEAVE">BAND</MDI>
+  </Metadata>
+  <Metadata domain="ENVI">
+    <MDI key="bands">1</MDI>
+    <MDI key="byte_order">0</MDI>
+    <MDI key="data_type">4</MDI>
+    <MDI key="file_type">ENVI Standard</MDI>
+    <MDI key="header_offset">0</MDI>
+    <MDI key="interleave">bsq</MDI>
+    <MDI key="lines">3600</MDI>
+    <MDI key="samples">3600</MDI>
+  </Metadata>
+  <Metadata>
+    <MDI key="AREA_OR_POINT">Area</MDI>
+    <MDI key="TIFFTAG_ARTIST">PCI</MDI>
+    <MDI key="TIFFTAG_SOFTWARE">PCI Geomatica</MDI>
+  </Metadata>
+  <PAMRasterBand band="1">
+    <Description>Geocoded DEM channel</Description>
+    <NoDataValue>-3.27680000000000E+04</NoDataValue>
+  </PAMRasterBand>
+</PAMDataset>

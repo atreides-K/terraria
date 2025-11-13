@@ -18,12 +18,14 @@ set(APP_SOURCES
     src/Pipeline.cpp
     utils/demLoader.cpp
     utils/ShaderLoader.cpp
+    src/LodManager.cpp
 )
 add_executable(app ${APP_SOURCES})
 
 
 target_include_directories(app PRIVATE includes utils)
 message(STATUS "Current source dir: ${CMAKE_CURRENT_SOURCE_DIR}")
+
 
 set(DAWN_FETCH_DEPENDENCIES ON)
 set(DAWN_BUILD_MONOLITHIC_LIBRARY STATIC)
@@ -35,8 +37,22 @@ if(EMSCRIPTEN)
   target_link_libraries(app PRIVATE emdawnwebgpu_cpp webgpu_glfw glm)
   target_link_options(app PRIVATE
     "-sALLOW_MEMORY_GROWTH=1"
-    "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/dem/output.hdr@/data/output.hdr"
-    "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/dem/output.raw@/data/output.raw"
+
+    "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/dem/lods/elevation_lod0.hdr@/data/elevation_lod0.hdr"
+    "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/dem/lods/elevation_lod0.raw@/data/elevation_lod0.raw"
+
+    "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/dem/lods/elevation_lod1.hdr@/data/elevation_lod1.hdr"
+    "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/dem/lods/elevation_lod1.raw@/data/elevation_lod1.raw"
+
+    "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/dem/lods/elevation_lod2.hdr@/data/elevation_lod2.hdr"
+    "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/dem/lods/elevation_lod2.raw@/data/elevation_lod2.raw"
+
+    "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/dem/lods/elevation_lod3.hdr@/data/elevation_lod3.hdr"
+    "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/dem/lods/elevation_lod3.raw@/data/elevation_lod3.raw"
+
+    "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/dem/lods/elevation_lod4.hdr@/data/elevation_lod4.hdr"
+    "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/dem/lods/elevation_lod4.raw@/data/elevation_lod4.raw"
+    
     "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/shaders/mesh.wgsl@/data/mesh.wgsl"
     "-sASYNCIFY=1"
     "-fexceptions"
@@ -44,5 +60,6 @@ if(EMSCRIPTEN)
     )
   
 else()
+
   target_link_libraries(app PRIVATE webgpu_dawn webgpu_glfw glfw glm)
 endif()

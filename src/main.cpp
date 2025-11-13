@@ -18,11 +18,11 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "Camera.h"
-
 wgpu::Instance instance;
 wgpu::Adapter adapter;
 wgpu::Device device;
 wgpu::RenderPipeline pipeline;
+wgpu::RenderPipeline wfPipeline;
 
 wgpu::Surface surface;
 wgpu::TextureFormat format;
@@ -34,19 +34,21 @@ const uint32_t kHeight = 1080;
 #include <map>
 #include <string>
 #include <demLoader.h>
-
+#include <LodManager.h>
 
 // shader
 #include <ShaderLoader.h>
 
 std::map<std::string, bool> keyStates;
-Camera camera(glm::vec3(0.0f, 30.0f, 0.0f));
+Camera camera(glm::vec3(0.0f, 90.0f, 0.0f));
 
 
 
 
 wgpu::Buffer uniformBuffer;
+wgpu::Buffer terrainUniformBuffer;
 wgpu::BindGroup uniformBindGroup;
+
 wgpu::Buffer rfuInstanceBuffer;
 wgpu::Buffer rfuHInstanceBuffer;
 wgpu::Buffer LInstanceBuffer;
@@ -55,6 +57,7 @@ wgpu::Buffer LHInstanceBuffer;
 
 // mesh
 Mesh mesh;
+LODManager lodManager;
 
 // NEW: Mouse input state
 float lastX = kWidth / 2.0f;
@@ -140,19 +143,23 @@ void Init() {
       });
   instance.WaitAny(f2, UINT64_MAX);
 }
+
+bool bRenderSolid = false;
+bool bRenderWireframe = true; 
+
 void Render() {
     wgpu::SurfaceTexture surfaceTexture;
     surface.GetCurrentTexture(&surfaceTexture);
 
-    // 1. Update camera uniform buffer
-    glm::mat4 view = camera.getViewMatrix(); 
+    // 1. Update camera uniform buffer (once per frame)
+    glm::mat4 view = camera.getViewMatrix();
     glm::mat4 proj = glm::perspective(glm::radians(45.0f),
                                       (float)kWidth / (float)kHeight,
-                                      0.1f, 100.0f);
+                                      0.1f, 1000000.0f);
     glm::mat4 viewProj = proj * view;
     device.GetQueue().WriteBuffer(uniformBuffer, 0, &viewProj, sizeof(glm::mat4));
 
-    
+
     // 2. Setup render pass
     wgpu::RenderPassColorAttachment attachment{
         .view = surfaceTexture.texture.CreateView(),
@@ -160,50 +167,102 @@ void Render() {
         .storeOp = wgpu::StoreOp::Store,
         .clearValue = {0.1, 0.1, 0.15, 1.0}
     };
-    wgpu::RenderPassDescriptor passDesc{.colorAttachmentCount = 1, .colorAttachments = &attachment};
+
+    // IMPORTANT: For wireframe-on-solid, you need a depth buffer.
+    // This is a minimal setup. You would need to create the depthTextureView elsewhere.
+    /*
+    wgpu::RenderPassDepthStencilAttachment depthAttachment {
+        .view = depthTextureView, // You need to create this texture and view
+        .depthLoadOp = wgpu::LoadOp::Clear,
+        .depthStoreOp = wgpu::StoreOp::Store,
+        .depthClearValue = 1.0f,
+    };
+    */
+    wgpu::RenderPassDescriptor passDesc{
+        .colorAttachmentCount = 1,
+        .colorAttachments = &attachment,
+        //.depthStencilAttachment = &depthAttachment // Uncomment when depth buffer is ready
+    };
 
     wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
     wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&passDesc);
 
-    // Set pipeline and bind groups once for the entire pass
-    pass.SetPipeline(pipeline);
+    // --- Set bind groups once, as they are shared by both pipelines ---
     pass.SetBindGroup(0, uniformBindGroup);
-    
-    // --- DRAW 1: The main instanced mesh ---
-    pass.SetVertexBuffer(0, mesh.getVertexBuffer());
-    pass.SetIndexBuffer(mesh.getIndexBuffer(), wgpu::IndexFormat::Uint32);
-    pass.SetVertexBuffer(1, instanceBuffer);
-    pass.DrawIndexed(mesh.getIndexCount(), instances.size(), 0, 0, 0);
+    pass.SetBindGroup(1, lodManager.getBindGroup());
 
-    // --- DRAW 2: The single "RFU" instance ---
-    // Update the data for the single instance
-   
-    // Bind its geometry and single-instance buffer
-    pass.SetVertexBuffer(0, mesh.getRfuVertexBuffer());
-    pass.SetIndexBuffer(mesh.getRfuIndexBuffer(), wgpu::IndexFormat::Uint32);
-    pass.SetVertexBuffer(1, rfuInstanceBuffer);
-    pass.DrawIndexed(mesh.getRfuIndexCount(), rfuInstances.size(), 0, 0, 0); 
 
-    pass.SetVertexBuffer(0, mesh.getRfuHVertexBuffer());
-    pass.SetIndexBuffer(mesh.getRfuHIndexBuffer(), wgpu::IndexFormat::Uint32);
-    pass.SetVertexBuffer(1, rfuHInstanceBuffer);
-    pass.DrawIndexed(mesh.getRfuHIndexCount(), rfuHInstances.size(), 0, 0, 0); 
+    // --- RENDER SOLID MESHES ---
+    if (bRenderSolid) {
+        pass.SetPipeline(pipeline); // Use the solid (TriangleStrip) pipeline
 
-  
-    // Draw L-shaped trim mesh
-    pass.SetVertexBuffer(0, mesh.getTrimVertexBuffer());
-    pass.SetIndexBuffer(mesh.getTrimIndexBuffer(), wgpu::IndexFormat::Uint32);
-    pass.SetVertexBuffer(1, LInstanceBuffer);
-    pass.DrawIndexed(mesh.getTrimIndexCount(), LInstances.size(), 0, 0, 0); // Draw exactly one instance
+        // Draw main instanced mesh
+        pass.SetVertexBuffer(0, mesh.getVertexBuffer());
+        pass.SetIndexBuffer(mesh.getIndexBuffer(), wgpu::IndexFormat::Uint32);
+        pass.SetVertexBuffer(1, instanceBuffer);
+        pass.DrawIndexed(mesh.getIndexCount(), instances.size(), 0, 0, 0);
 
-    // device.GetQueue().WriteBuffer(LHInstanceBuffer, 0, LHInstances.data(), sizeof(InstanceData) * LHInstances.size());
-    // Draw L-shaped trim mesh
-    pass.SetVertexBuffer(0, mesh.getTrimHVertexBuffer());
-    pass.SetIndexBuffer(mesh.getTrimHIndexBuffer(), wgpu::IndexFormat::Uint32);
-    pass.SetVertexBuffer(1, LHInstanceBuffer);
-    pass.DrawIndexed(mesh.getTrimHIndexCount(), LHInstances.size(), 0, 0, 0); // Draw exactly one instance
+        // Draw RFU instances
+        pass.SetVertexBuffer(0, mesh.getRfuVertexBuffer());
+        pass.SetIndexBuffer(mesh.getRfuIndexBuffer(), wgpu::IndexFormat::Uint32);
+        pass.SetVertexBuffer(1, rfuInstanceBuffer);
+        pass.DrawIndexed(mesh.getRfuIndexCount(), rfuInstances.size(), 0, 0, 0);
 
-    // End the pass and submit
+        // Draw RFU Horizontal instances
+        pass.SetVertexBuffer(0, mesh.getRfuHVertexBuffer());
+        pass.SetIndexBuffer(mesh.getRfuHIndexBuffer(), wgpu::IndexFormat::Uint32);
+        pass.SetVertexBuffer(1, rfuHInstanceBuffer);
+        pass.DrawIndexed(mesh.getRfuHIndexCount(), rfuHInstances.size(), 0, 0, 0);
+
+        // Draw L-shaped trim instances
+        pass.SetVertexBuffer(0, mesh.getTrimVertexBuffer());
+        pass.SetIndexBuffer(mesh.getTrimIndexBuffer(), wgpu::IndexFormat::Uint32);
+        pass.SetVertexBuffer(1, LInstanceBuffer);
+        pass.DrawIndexed(mesh.getTrimIndexCount(), LInstances.size(), 0, 0, 0);
+
+        // Draw L-shaped Horizontal trim instances
+        pass.SetVertexBuffer(0, mesh.getTrimHVertexBuffer());
+        pass.SetIndexBuffer(mesh.getTrimHIndexBuffer(), wgpu::IndexFormat::Uint32);
+        pass.SetVertexBuffer(1, LHInstanceBuffer);
+        pass.DrawIndexed(mesh.getTrimHIndexCount(), LHInstances.size(), 0, 0, 0);
+    }
+
+    // --- RENDER WIREFRAME OVERLAYS ---
+    if (bRenderWireframe) {
+        pass.SetPipeline(wfPipeline); // Switch to the wireframe (LineStrip) pipeline
+
+        // Draw wireframe for main instanced mesh
+        pass.SetVertexBuffer(0, mesh.getVertexBuffer());
+        pass.SetIndexBuffer(mesh.getIndexBuffer(), wgpu::IndexFormat::Uint32);
+        pass.SetVertexBuffer(1, instanceBuffer);
+        pass.DrawIndexed(mesh.getIndexCount(), instances.size(), 0, 0, 0);
+
+        // Draw wireframe for RFU instances
+        pass.SetVertexBuffer(0, mesh.getRfuVertexBuffer());
+        pass.SetIndexBuffer(mesh.getRfuIndexBuffer(), wgpu::IndexFormat::Uint32);
+        pass.SetVertexBuffer(1, rfuInstanceBuffer);
+        pass.DrawIndexed(mesh.getRfuIndexCount(), rfuInstances.size(), 0, 0, 0);
+
+        // Draw wireframe for RFU Horizontal instances
+        pass.SetVertexBuffer(0, mesh.getRfuHVertexBuffer());
+        pass.SetIndexBuffer(mesh.getRfuHIndexBuffer(), wgpu::IndexFormat::Uint32);
+        pass.SetVertexBuffer(1, rfuHInstanceBuffer);
+        pass.DrawIndexed(mesh.getRfuHIndexCount(), rfuHInstances.size(), 0, 0, 0);
+
+        // Draw wireframe for L-shaped trim instances
+        pass.SetVertexBuffer(0, mesh.getTrimVertexBuffer());
+        pass.SetIndexBuffer(mesh.getTrimIndexBuffer(), wgpu::IndexFormat::Uint32);
+        pass.SetVertexBuffer(1, LInstanceBuffer);
+        pass.DrawIndexed(mesh.getTrimIndexCount(), LInstances.size(), 0, 0, 0);
+
+        // Draw wireframe for L-shaped Horizontal trim instances
+        pass.SetVertexBuffer(0, mesh.getTrimHVertexBuffer());
+        pass.SetIndexBuffer(mesh.getTrimHIndexBuffer(), wgpu::IndexFormat::Uint32);
+        pass.SetVertexBuffer(1, LHInstanceBuffer);
+        pass.DrawIndexed(mesh.getTrimHIndexCount(), LHInstances.size(), 0, 0, 0);
+    }
+
+    // End the pass and submit the command buffer
     pass.End();
     wgpu::CommandBuffer cmd = encoder.Finish();
     device.GetQueue().Submit(1, &cmd);
@@ -212,10 +271,14 @@ void Render() {
 void InitGraphics() {
   ConfigureSurface();
   mesh(device);
-
+  #if defined(__EMSCRIPTEN__)
+    std::string shader="data/mesh.wgsl";
+  #else
+    std::string shader="shaders/mesh.wgsl";
+  #endif
   std::string shaderCode;
     try {
-        shaderCode = loadShaderSource("data/mesh.wgsl");
+        shaderCode = loadShaderSource(shader);
     } catch (const std::runtime_error& e) {
         std::cerr << "Fatal Error: " << e.what() << std::endl;
         // Handle error, maybe exit or throw an exception.
@@ -227,9 +290,9 @@ void InitGraphics() {
   wgpu::BindGroupLayoutEntry bglEntry{
       .binding = 0,
       .visibility = wgpu::ShaderStage::Vertex,
-      .buffer.type = wgpu::BufferBindingType::Uniform,
-  };
- 
+    };
+    bglEntry.buffer.type = wgpu::BufferBindingType::Uniform;
+    
   wgpu::BindGroupLayoutDescriptor bglDesc{
       .entryCount = 1,
       .entries = &bglEntry
@@ -247,8 +310,52 @@ void InitGraphics() {
   // };
   // wgpu::BindGroupLayout mDataGroupLayout = device.CreateBindGroupLayout(&mDataDesc);
 
-  std::vector<wgpu::BindGroupLayout> bindGroupLayouts = {cameraBindGroupLayout};
+  // wgpu::BindGroupLayoutEntry bglEntries[3] = {}; // Now need 3 for the uniform
+  // bglEntries[0].binding = 0;
+  // // --- THIS IS THE KEY CHANGE ---
+  // bglEntries[0].visibility = wgpu::ShaderStage::Vertex; // VISIBILITY IS NOW VERTEX!
+  // bglEntries[0].texture.sampleType = wgpu::TextureSampleType::UnfilterableFloat; // Best for R32Float data
+  // bglEntries[0].texture.viewDimension = wgpu::TextureViewDimension::e2DArray;
 
+  // bglEntries[1].binding = 1;
+  // // --- AND HERE ---
+  // bglEntries[1].visibility = wgpu::ShaderStage::Vertex;
+  // bglEntries[1].sampler.type = wgpu::SamplerBindingType::NonFiltering; // Best for data
+
+  // // Don't forget the new TerrainUniforms buffer layout entry
+  // bglEntries[2].binding = 2;
+  // bglEntries[2].visibility = wgpu::ShaderStage::Vertex;
+  // bglEntries[2].buffer.type = wgpu::BufferBindingType::Uniform;
+
+  // wgpu::BindGroupLayoutDescriptor bglDesc = { .entryCount = 3, .entries = bglEntries };
+  // wgpu::BindGroupLayout LODBindGroupLayout = device.CreateBindGroupLayout(&bglDesc);
+
+
+ terrainUniformBuffer = BufferUtils::createUniformBuffer(device, sizeof(terrainUniforms));
+  lodManager(device);
+
+  #if defined(__EMSCRIPTEN__)
+
+    std::vector<std::string> lodFiles = {
+      "/data/elevation_lod0",
+      "/data/elevation_lod1",
+      "/data/elevation_lod2",
+      "/data/elevation_lod3",
+      "/data/elevation_lod4"
+    };
+  #else
+    std::vector<std::string> lodFiles = {
+      "dem/lods/elevation_lod0",
+      "dem/lods/elevation_lod1",
+      "dem/lods/elevation_lod2",
+      "dem/lods/elevation_lod3",
+      "dem/lods/elevation_lod4"
+    };
+  #endif
+
+  lodManager.loadLODs(lodFiles, terrainUniformBuffer);
+  std::vector<wgpu::BindGroupLayout> bindGroupLayouts = {cameraBindGroupLayout, lodManager.getBindGroupLayout()};
+  
   wgpu::PipelineLayoutDescriptor layoutDesc{
       .bindGroupLayoutCount = static_cast<uint32_t>(bindGroupLayouts.size()),
       .bindGroupLayouts = bindGroupLayouts.data()
@@ -256,16 +363,28 @@ void InitGraphics() {
   wgpu::PipelineLayout pipelineLayout = device.CreatePipelineLayout(&layoutDesc);
 
 
-  PipelineConfig MeshConfig{};
-  MeshConfig.surfaceFormat = format;
-  MeshConfig.layout = pipelineLayout;
+   PipelineConfig solidConfig{};
+  solidConfig.surfaceFormat = format;
+  solidConfig.layout = pipelineLayout;
+  // Your current mesh uses TriangleStrip, so let's set it explicitly.
+  // The createIndicesT function creates a TriangleStrip.
+  solidConfig.topology = wgpu::PrimitiveTopology::TriangleStrip;
+
   try {
-      pipeline = Pipeline(device, MeshConfig, shaderCode).getPipeline();
+      pipeline = Pipeline(device, solidConfig, shaderCode).getPipeline();
   } catch (const std::runtime_error& e) {
-      std::cerr << "Pipeline creation failed: " << e.what() << std::endl;
+      std::cerr << "Solid Pipeline creation failed: " << e.what() << std::endl;
+      exit(1);
   }
-  if (!pipeline) {
-      std::cerr << "Pipeline is invalid!" << std::endl;
+
+  // --- Create the WIREFRAME pipeline ---
+  PipelineConfig wireframeConfig = solidConfig; // Start by copying the solid config
+  wireframeConfig.topology = wgpu::PrimitiveTopology::LineStrip; // <-- THE ONLY CHANGE!
+
+  try {
+      wfPipeline = Pipeline(device, wireframeConfig, shaderCode).getPipeline();
+  } catch (const std::runtime_error& e) {
+      std::cerr << "Wireframe Pipeline creation failed: " << e.what() << std::endl;
       exit(1);
   }
 
@@ -289,7 +408,7 @@ void InitGraphics() {
   };
   uniformBindGroup = device.CreateBindGroup(&bgDesc);
 
-  int i=1;  
+  uint32_t i=1;  
   int mm=m-1;
    
   int x=0;
@@ -326,9 +445,9 @@ void InitGraphics() {
 
     std::vector<InstanceData> instancesLOD ={
         { { mm*3+1,mm+1 }, scale, 0 , colors[8]},
-        { { mm*3+1,mm*2+1 }, scale, 1 , colors[9]},
-        { { mm*2+1, mm+1 }, scale, 1 , colors[10]},
-        { { mm*2+1, mm*2+1 }, scale, 1 , colors[11]},
+        { { mm*3+1,mm*2+1 }, scale, 0 , colors[9]},
+        { { mm*2+1, mm+1 }, scale, 0 , colors[10]},
+        { { mm*2+1, mm*2+1 }, scale, 0 , colors[11]},
         
         // { { -2.0f * m,  1.5f * m }, 1, 1 , glm::vec4(0.0f, 0.0f, 1.0f, 1.0f)},
         
@@ -340,7 +459,10 @@ void InitGraphics() {
     LHInstances.push_back(LInstance);
     LInstance={{mm,mm+1},scale,0,colors[12]};
     LInstances.push_back(LInstance);
-    for(i=1;i<12;i++){
+
+
+
+    for(i=1;i<6;i++){
       x+=mm*scale;
       xx+=mm*scale;
       if(i%2==0)
@@ -358,29 +480,29 @@ void InitGraphics() {
         right=mm*3+2+mm*(scale-1)+y;
         left=mm-x;
         if(i%2==0){
-          InstanceData LHInstance = { {midt, midl}, scale, 0, colors[0] }; // Made it white to be visible
+          InstanceData LHInstance = { {midt, midl}, scale, i-1, colors[0] }; // Made it white to be visible
               LHInstances.push_back(LHInstance);
 
-          InstanceData LInstance = { {botl,midl+scale}, scale, 0, colors[2] }; // Made it white to be visible
+          InstanceData LInstance = { {botl,midl+scale}, scale, i-1, colors[2] }; // Made it white to be visible
           LInstances.push_back(LInstance);
         }
         else{
-          InstanceData LHInstance = { {botl+scale, midl}, scale, 0, colors[0] };
+          InstanceData LHInstance = { {botl+scale, midl}, scale, i-1, colors[0] };
           LHInstances.push_back(LHInstance);
 
-          InstanceData LInstance = { {botl,right}, scale, 0, colors[2] };
+          InstanceData LInstance = { {botl,right}, scale, i-1, colors[2] };
           LInstances.push_back(LInstance);
 
         }
 
-        InstanceData rfuInstance = { {topl, midr-scale*2}, scale, 0, colors[1] };
+        InstanceData rfuInstance = { {topl, midr-scale*2}, scale, i-1, colors[1] };
         rfuInstances.push_back(rfuInstance);
-        rfuInstance = { {botl, midr-scale*2}, scale, 0, colors[1] };
+        rfuInstance = { {botl, midr-scale*2}, scale, i-1, colors[1] };
         rfuInstances.push_back(rfuInstance);
 
-        InstanceData rfuHInstance = { {midb+scale*2, left}, scale, 0, colors[12] };
+        InstanceData rfuHInstance = { {midb+scale*2, left}, scale, i-1, colors[12] };
         rfuHInstances.push_back(rfuHInstance);
-        rfuHInstance = { {midb+scale*2, right}, scale, 0, colors[12] };
+        rfuHInstance = { {midb+scale*2, right}, scale, i-1, colors[12] };
         rfuHInstances.push_back(rfuHInstance);
         // std::cout<<"x: "<<x<<" y: "<<y<<" scale: "<<scale<<std::endl;
 
@@ -388,21 +510,21 @@ void InitGraphics() {
       
         std::vector<InstanceData> instancesLOD = {
         // --- Top row of blocks ---
-        { { topl, left }, scale, 0 , colors[0]},
-        { { topl,midl}, scale, 1 , colors[1]},
-        { { topl, midr }, scale, 1 , colors[2]},
-        { { topl, right }, scale, 1 , colors[3]},
+        { { topl, left }, scale, i-1 , colors[0]},
+        { { topl,midl}, scale, i-1 , colors[1]},
+        { { topl, midr }, scale, i-1 , colors[2]},
+        { { topl, right }, scale, i-1 , colors[3]},
 
-        { { midt, left }, scale, 0 , colors[4]},
-        { { midt, right}, scale, 1 , colors[5]},
+        { { midt, left }, scale, i-1 , colors[4]},
+        { { midt, right}, scale, i-1 , colors[5]},
 
-        { { midb, left  }, scale, 0 , colors[6]},
-        { { midb, right}, scale, 1 , colors[7]},
+        { { midb, left  }, scale, i-1 , colors[6]},
+        { { midb, right}, scale, i-1 , colors[7]},
 
-        { { botl, left}, scale, 0 , colors[8]},
-        { { botl,midl }, scale, 1 , colors[9]},
-        { { botl, midr }, scale, 1 , colors[10]},
-        { { botl, right }, scale, 1 , colors[11]},
+        { { botl, left}, scale, i-1 , colors[8]},
+        { { botl,midl }, scale, i-1 , colors[9]},
+        { { botl, midr }, scale, i-1 , colors[10]},
+        { { botl, right }, scale, i-1 , colors[11]},
         
         // { { -2.0f * m,  1.5f * m }, 1, 1 , glm::vec4(0.0f, 0.0f, 1.0f, 1.0f)},
         
@@ -478,6 +600,16 @@ void processInput(GLFWwindow *window) {
         camera.ProcessKeyboard(CameraMovement::UP, deltaTime);
     if (keyStates["Shift"] || keyStates["SHIFT"])
         camera.ProcessKeyboard(CameraMovement::DOWN, deltaTime);
+    if (keyStates["t"] || keyStates["t"])
+    {
+        // Handle control key press
+        bRenderSolid = !bRenderSolid;
+    }
+    if(keyStates["y"] || keyStates["Y"])
+    {
+        // Handle control key press
+        bRenderWireframe = !bRenderWireframe;
+    }
 #else
     // Native desktop version: Use polling with glfwGetKey.
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
@@ -492,6 +624,16 @@ void processInput(GLFWwindow *window) {
         camera.ProcessKeyboard(CameraMovement::UP, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
         camera.ProcessKeyboard(CameraMovement::DOWN, deltaTime);
+    if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS)
+    {
+        // Handle control key press
+        bRenderSolid = !bRenderSolid;
+    }
+    if (glfwGetKey(window, GLFW_KEY_Y) == GLFW_PRESS)
+    {
+        // Handle control key press 
+        bRenderWireframe = !bRenderWireframe;
+    }
 #endif
 }
 // This function will be called by Emscripten whenever a key is pressed down.
@@ -586,23 +728,7 @@ void Start() {
 }
 
 int main() {
-  // try {
-  //       // Use the VIRTUAL paths you specified in CMake.
-  //       const std::string hdrPath = "/data/output.hdr";
-  //       const std::string rawPath = "/data/output.raw";
 
-  //       std::cout << "load DEM from vfs" << std::endl;
-  //       DEMLoader loader(rawPath, hdrPath);
-
-  //       // You can now use the loaded data...
-  //       int width = loader.getWidth();
-  //       int height = loader.getHeight();
-  //       std::cout << "Successfully loaded DEM with dimensions: " 
-  //                 << width << "x" << height << std::endl;
-
-  //   } catch (const std::runtime_error& e) {
-  //       std::cerr << "An error occurred: " << e.what() << std::endl;
-  //   }
   Init();
   Start();
 }
