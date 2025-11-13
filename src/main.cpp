@@ -340,8 +340,8 @@ void InitGraphics() {
       "/data/elevation_lod0",
       "/data/elevation_lod1",
       "/data/elevation_lod2",
-      "/data/elevation_lod3",
-      "/data/elevation_lod4"
+      // "/data/elevation_lod3",
+      // "/data/elevation_lod4"
     };
   #else
     std::vector<std::string> lodFiles = {
@@ -462,7 +462,7 @@ void InitGraphics() {
 
 
 
-    for(i=1;i<6;i++){
+    for(i=1;i<4;i++){
       x+=mm*scale;
       xx+=mm*scale;
       if(i%2==0)

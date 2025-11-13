@@ -2,26 +2,34 @@
 
 
 ## To Dos
-### Part I
+### Part I ()
 - [x] make a badass triangle
 - [x] ez one stop cmake setup
 - [x] refactoring main
 - [x] camera view
-- [ ] DEM loader
-- [ ] render basic terrain(flat)
-- [ ] start with lod work
+- [x] DEM loader
+- [x] render basic terrain(flat)
+- [ ] toroidal*
+- [ ] camera movement fix
+- [ ] minimap *
+- [ ] wireframe use line list cause linestrip cause weird end to start row lines
+- [ ] workout camera centered 
+- [ ] proper height field scaled wrt to mesh
 
 ### Part II
+- [ ] download osm vector data
+- [ ] load vector to gpu(different formats so need to look into it)
 - [ ] road to terrain
 - [ ] buildings to terrain
 
 ### Presentation
-- [ ] make paper presentation slide template
-- [ ] motivation
-- [ ] Key ideas
+- [x] make paper presentation slide template
+- [x] motivation
+- [x] Key ideas
 - [ ] Basic render demo
 
-
+### Final Presentation
+- [ ] ?
     
 
 
@@ -111,7 +119,16 @@ sudo apt install libgal-dev gdal-bin
 
 ```
 
-### converting tif to .raw 
-```
-gdal_translate -of ENVI -ot Float32 input_dem.tif output_dem.raw
-```
+### Hows it used
+so this dem data is then converted to raw and hdr format respective which are loaded to the browser
+
+currently we convert downscale all the dem fr different lod levels
+
+next we upscale it back to match the original dimension. i know this not smart but just needed something quick. later hopefully look into sampling from upscaled coarsest level and then use the elevation difference between lods as per paper
+
+the loaded dems are then uploaded as textures buffer to the gpu
+
+
+### OSM VECTOR DATA
+
+coming soon
