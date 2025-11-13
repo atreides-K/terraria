@@ -44,6 +44,20 @@ Pipeline::Pipeline(
     };
     m_pipeline = device.CreateRenderPipeline(&descriptor);
 
+    wgpu::PrimitiveState primitiveStateWF{
+        .topology = config.topology,
+        .frontFace = wgpu::FrontFace::CCW,
+        
+        .cullMode = wgpu::CullMode::None
+    };
+    wgpu::RenderPipelineDescriptor descriptorWF{
+        .layout = config.layout,
+        .vertex = vertexState,
+        .primitive = primitiveStateWF,
+        .fragment = &fragmentState
+    };
+    m_pipelineWF = device.CreateRenderPipeline(&descriptorWF);
+
 }
 
 // This function is in Pipeline.cpp, which now includes "DataTypes.h"
@@ -99,4 +113,9 @@ wgpu::VertexState Pipeline::createVertexPipelineLayout(
 wgpu::RenderPipeline Pipeline::getPipeline() const{
     return m_pipeline;
      
+}
+
+wgpu::RenderPipeline Pipeline::getPipelineWF() const{
+    return m_pipelineWF;
+
 }

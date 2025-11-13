@@ -53,6 +53,36 @@ public:
     wgpu::Buffer getTrimHIndexBuffer() const;
 
 
+    // LINELIST
+    wgpu::Buffer getVertexBufferLL() const;
+    wgpu::Buffer getIndexBufferLL() const;
+    uint32_t getVertexCountLL() const;
+    uint32_t getIndexCountLL() const;
+
+    // RFU_V 
+    wgpu::Buffer getRfuVertexBufferLL() const;
+    wgpu::Buffer getRfuIndexBufferLL() const;
+    uint32_t getRfuVertexCountLL() const;
+    uint32_t getRfuIndexCountLL() const;
+
+    // RFU_H
+    wgpu::Buffer getRfuHVertexBufferLL() const;
+    wgpu::Buffer getRfuHIndexBufferLL() const;
+    uint32_t getRfuHVertexCountLL() const;
+    uint32_t getRfuHIndexCountLL() const;
+
+
+    wgpu::Buffer getTrimVertexBufferLL() const;
+    wgpu::Buffer getTrimIndexBufferLL() const;
+    uint32_t getTrimVertexCountLL() const;
+    uint32_t getTrimIndexCountLL() const;
+
+    uint32_t getTrimHVertexCountLL() const;
+    uint32_t getTrimHIndexCountLL() const;
+    wgpu::Buffer getTrimHVertexBufferLL() const;
+    wgpu::Buffer getTrimHIndexBufferLL() const;
+
+
 private:
     // Private member variables. The Mesh object owns these resources.
     wgpu::Buffer m_vertexBuffer;
@@ -81,6 +111,34 @@ private:
     uint32_t trimH_indexCount = 0;
     wgpu::Buffer trimH_vertexBuffer;
     wgpu::Buffer trimH_indexBuffer;
+
+    // LINELIST
+    wgpu::Buffer m_vertexBufferLL;
+    wgpu::Buffer m_indexBufferLL;
+    uint32_t m_vertexCountLL = 0;
+    uint32_t m_indexCountLL = 0;
+
+    // rfu
+    wgpu::Buffer rfu_vertexBufferLL;
+    wgpu::Buffer rfu_indexBufferLL;
+    uint32_t rfu_vertexCountLL = 0;
+    uint32_t rfu_indexCountLL = 0;
+
+    wgpu::Buffer rfuH_vertexBufferLL;
+    wgpu::Buffer rfuH_indexBufferLL;
+    uint32_t rfuH_vertexCountLL = 0;
+    uint32_t rfuH_indexCountLL = 0;
+
+     // trim
+    wgpu::Buffer trim_vertexBufferLL;
+    wgpu::Buffer trim_indexBufferLL;
+    uint32_t trim_vertexCountLL = 0;
+    uint32_t trim_indexCountLL = 0;
+
+    uint32_t trimH_vertexCountLL = 0;
+    uint32_t trimH_indexCountLL = 0;
+    wgpu::Buffer trimH_vertexBufferLL;
+    wgpu::Buffer trimH_indexBufferLL;
 
     std::vector<Vertex> createMesh(const int& h=m,const int& w=m);
     std::vector<Vertex> createSmallMesh(const int& h=m,const int& w=m);

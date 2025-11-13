@@ -233,33 +233,33 @@ void Render() {
 
         // Draw wireframe for main instanced mesh
         pass.SetVertexBuffer(0, mesh.getVertexBuffer());
-        pass.SetIndexBuffer(mesh.getIndexBuffer(), wgpu::IndexFormat::Uint32);
+        pass.SetIndexBuffer(mesh.getIndexBufferLL(), wgpu::IndexFormat::Uint32);
         pass.SetVertexBuffer(1, instanceBuffer);
-        pass.DrawIndexed(mesh.getIndexCount(), instances.size(), 0, 0, 0);
+        pass.DrawIndexed(mesh.getIndexCountLL(), instances.size(), 0, 0, 0);
 
         // Draw wireframe for RFU instances
         pass.SetVertexBuffer(0, mesh.getRfuVertexBuffer());
-        pass.SetIndexBuffer(mesh.getRfuIndexBuffer(), wgpu::IndexFormat::Uint32);
+        pass.SetIndexBuffer(mesh.getRfuIndexBufferLL(), wgpu::IndexFormat::Uint32);
         pass.SetVertexBuffer(1, rfuInstanceBuffer);
-        pass.DrawIndexed(mesh.getRfuIndexCount(), rfuInstances.size(), 0, 0, 0);
+        pass.DrawIndexed(mesh.getRfuIndexCountLL(), rfuInstances.size(), 0, 0, 0);
 
         // Draw wireframe for RFU Horizontal instances
         pass.SetVertexBuffer(0, mesh.getRfuHVertexBuffer());
-        pass.SetIndexBuffer(mesh.getRfuHIndexBuffer(), wgpu::IndexFormat::Uint32);
+        pass.SetIndexBuffer(mesh.getRfuHIndexBufferLL(), wgpu::IndexFormat::Uint32);
         pass.SetVertexBuffer(1, rfuHInstanceBuffer);
-        pass.DrawIndexed(mesh.getRfuHIndexCount(), rfuHInstances.size(), 0, 0, 0);
+        pass.DrawIndexed(mesh.getRfuHIndexCountLL(), rfuHInstances.size(), 0, 0, 0);
 
         // Draw wireframe for L-shaped trim instances
         pass.SetVertexBuffer(0, mesh.getTrimVertexBuffer());
-        pass.SetIndexBuffer(mesh.getTrimIndexBuffer(), wgpu::IndexFormat::Uint32);
+        pass.SetIndexBuffer(mesh.getTrimIndexBufferLL(), wgpu::IndexFormat::Uint32);
         pass.SetVertexBuffer(1, LInstanceBuffer);
-        pass.DrawIndexed(mesh.getTrimIndexCount(), LInstances.size(), 0, 0, 0);
+        pass.DrawIndexed(mesh.getTrimIndexCountLL(), LInstances.size(), 0, 0, 0);
 
         // Draw wireframe for L-shaped Horizontal trim instances
         pass.SetVertexBuffer(0, mesh.getTrimHVertexBuffer());
-        pass.SetIndexBuffer(mesh.getTrimHIndexBuffer(), wgpu::IndexFormat::Uint32);
+        pass.SetIndexBuffer(mesh.getTrimHIndexBufferLL(), wgpu::IndexFormat::Uint32);
         pass.SetVertexBuffer(1, LHInstanceBuffer);
-        pass.DrawIndexed(mesh.getTrimHIndexCount(), LHInstances.size(), 0, 0, 0);
+        pass.DrawIndexed(mesh.getTrimHIndexCountLL(), LHInstances.size(), 0, 0, 0);
     }
 
     // End the pass and submit the command buffer
@@ -298,37 +298,6 @@ void InitGraphics() {
       .entries = &bglEntry
   };
   wgpu::BindGroupLayout cameraBindGroupLayout = device.CreateBindGroupLayout(&bglDesc);
-
-  // wgpu::BindGroupLayoutEntry mDataBglEntry{
-  //     .binding = 0,
-  //     .visibility = wgpu::ShaderStage::Vertex,
-  //     .buffer.type = wgpu::BufferBindingType::Uniform,
-  // };
-  // wgpu::BindGroupLayoutDescriptor mDataDesc{
-  //     .entryCount = 1,
-  //     .entries = &mDataBglEntry
-  // };
-  // wgpu::BindGroupLayout mDataGroupLayout = device.CreateBindGroupLayout(&mDataDesc);
-
-  // wgpu::BindGroupLayoutEntry bglEntries[3] = {}; // Now need 3 for the uniform
-  // bglEntries[0].binding = 0;
-  // // --- THIS IS THE KEY CHANGE ---
-  // bglEntries[0].visibility = wgpu::ShaderStage::Vertex; // VISIBILITY IS NOW VERTEX!
-  // bglEntries[0].texture.sampleType = wgpu::TextureSampleType::UnfilterableFloat; // Best for R32Float data
-  // bglEntries[0].texture.viewDimension = wgpu::TextureViewDimension::e2DArray;
-
-  // bglEntries[1].binding = 1;
-  // // --- AND HERE ---
-  // bglEntries[1].visibility = wgpu::ShaderStage::Vertex;
-  // bglEntries[1].sampler.type = wgpu::SamplerBindingType::NonFiltering; // Best for data
-
-  // // Don't forget the new TerrainUniforms buffer layout entry
-  // bglEntries[2].binding = 2;
-  // bglEntries[2].visibility = wgpu::ShaderStage::Vertex;
-  // bglEntries[2].buffer.type = wgpu::BufferBindingType::Uniform;
-
-  // wgpu::BindGroupLayoutDescriptor bglDesc = { .entryCount = 3, .entries = bglEntries };
-  // wgpu::BindGroupLayout LODBindGroupLayout = device.CreateBindGroupLayout(&bglDesc);
 
 
  terrainUniformBuffer = BufferUtils::createUniformBuffer(device, sizeof(terrainUniforms));
@@ -379,10 +348,10 @@ void InitGraphics() {
 
   // --- Create the WIREFRAME pipeline ---
   PipelineConfig wireframeConfig = solidConfig; // Start by copying the solid config
-  wireframeConfig.topology = wgpu::PrimitiveTopology::LineStrip; // <-- THE ONLY CHANGE!
+  wireframeConfig.topology = wgpu::PrimitiveTopology::LineList; // <-- THE ONLY CHANGE!
 
   try {
-      wfPipeline = Pipeline(device, wireframeConfig, shaderCode).getPipeline();
+      wfPipeline = Pipeline(device, wireframeConfig, shaderCode).getPipelineWF();
   } catch (const std::runtime_error& e) {
       std::cerr << "Wireframe Pipeline creation failed: " << e.what() << std::endl;
       exit(1);

@@ -2,21 +2,21 @@
 
 
 ## To Dos
-### Part I ()
+### Part I (Clipmap)
 - [x] make a badass triangle
 - [x] ez one stop cmake setup
 - [x] refactoring main
 - [x] camera view
 - [x] DEM loader
 - [x] render basic terrain(flat)
+- [x] wireframe use line list cause linestrip cause weird end to start row lines
 - [ ] toroidal*
 - [ ] camera movement fix
 - [ ] minimap *
-- [ ] wireframe use line list cause linestrip cause weird end to start row lines
 - [ ] workout camera centered 
 - [ ] proper height field scaled wrt to mesh
 
-### Part II
+### Part II(Urban vectors)
 - [ ] download osm vector data
 - [ ] load vector to gpu(different formats so need to look into it)
 - [ ] road to terrain
