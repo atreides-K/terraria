@@ -18,6 +18,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "Camera.h"
+#include "BuildingManager.h"
 wgpu::Instance instance;
 wgpu::Adapter adapter;
 wgpu::Device device;
@@ -286,6 +287,31 @@ void InitGraphics() {
     }
     
     
+    BuildingManager buildingManager;
+    buildingManager.initialize(device);
+    try {
+    // This path is for the preloaded virtual filesystem in Emscripten
+    // For a native build, this would be a relative path like "data/buildings.geojson"
+    const std::string geojsonVirtualPath = "osm/export.geojson";
+
+    // IMPORTANT: Replace these with the actual Lon/Lat of your DEM's (0,0) corner!
+    const double sceneOriginLon = 77.575000;
+    const double sceneOriginLat = 13.015000;
+    
+    std::cout << "Loading building data..." << std::endl;
+    buildingManager.loadBuildings(
+        geojsonVirtualPath,
+        sceneOriginLon,
+        sceneOriginLat,
+        25.0f // Optional: set a default height of 25 meters
+    );
+
+} catch (const std::exception& e) {
+    std::cerr << "FATAL ERROR: Could not load building data: " << e.what() << std::endl;
+    // Handle the error appropriately
+}
+
+
   // LAYOUT SETUP
   wgpu::BindGroupLayoutEntry bglEntry{
       .binding = 0,

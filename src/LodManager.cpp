@@ -35,7 +35,7 @@ void LODManager::loadLODs(const std::vector<std::string>& baseFilenames, wgpu::B
     );
 
 
-    // --- 2. Create the GPU Texture Array resource ---
+    // --- 3. Create the GPU Texture Array resource ---
     wgpu::TextureDescriptor textureDesc = {
         usage: wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::CopyDst,
         dimension: wgpu::TextureDimension::e2D,
