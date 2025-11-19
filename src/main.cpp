@@ -24,7 +24,9 @@ wgpu::Adapter adapter;
 wgpu::Device device;
 wgpu::RenderPipeline pipeline;
 wgpu::RenderPipeline wfPipeline;
-
+wgpu::RenderPipeline pipelineTL;
+wgpu::RenderPipeline pipelineBuilding;
+BuildingManager buildingManager;
 wgpu::Surface surface;
 wgpu::TextureFormat format;
 const uint32_t kWidth = 1920;
@@ -41,7 +43,7 @@ const uint32_t kHeight = 1080;
 #include <ShaderLoader.h>
 
 std::map<std::string, bool> keyStates;
-Camera camera(glm::vec3(0.0f, 90.0f, 0.0f));
+Camera camera(glm::vec3(0.0f, 0.0f, 0.0f));
 
 
 
@@ -157,8 +159,13 @@ void Render() {
     glm::mat4 proj = glm::perspective(glm::radians(45.0f),
                                       (float)kWidth / (float)kHeight,
                                       0.1f, 1000000.0f);
-    glm::mat4 viewProj = proj * view;
-    device.GetQueue().WriteBuffer(uniformBuffer, 0, &viewProj, sizeof(glm::mat4));
+    CameraUniforms camData;
+    camData.viewProj = proj * view;
+    // Pass the camera position (using .w = 1.0 or 0.0, doesn't matter for logic)
+    camData.worldPos = glm::vec4(camera.Position, 1.0f); 
+
+    // 2. Upload Data
+    device.GetQueue().WriteBuffer(uniformBuffer, 0, &camData, sizeof(CameraUniforms));
 
 
     // 2. Setup render pass
@@ -171,14 +178,14 @@ void Render() {
 
     // IMPORTANT: For wireframe-on-solid, you need a depth buffer.
     // This is a minimal setup. You would need to create the depthTextureView elsewhere.
-    /*
-    wgpu::RenderPassDepthStencilAttachment depthAttachment {
-        .view = depthTextureView, // You need to create this texture and view
-        .depthLoadOp = wgpu::LoadOp::Clear,
-        .depthStoreOp = wgpu::StoreOp::Store,
-        .depthClearValue = 1.0f,
-    };
-    */
+    
+    // wgpu::RenderPassDepthStencilAttachment depthAttachment {
+    //     .view = depthTextureView, // You need to create this texture and view
+    //     .depthLoadOp = wgpu::LoadOp::Clear,
+    //     .depthStoreOp = wgpu::StoreOp::Store,
+    //     .depthClearValue = 1.0f,
+    // };
+    
     wgpu::RenderPassDescriptor passDesc{
         .colorAttachmentCount = 1,
         .colorAttachments = &attachment,
@@ -189,13 +196,17 @@ void Render() {
     wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&passDesc);
 
     // --- Set bind groups once, as they are shared by both pipelines ---
+    pass.SetPipeline(pipelineBuilding);
     pass.SetBindGroup(0, uniformBindGroup);
-    pass.SetBindGroup(1, lodManager.getBindGroup());
-
+    pass.SetVertexBuffer(0, buildingManager.getVertexBuffer());
+    pass.SetIndexBuffer(buildingManager.getIndexBuffer(), wgpu::IndexFormat::Uint32);
+    pass.DrawIndexed(buildingManager.getIndexCount(), 1, 0, 0, 0);
+    
 
     // --- RENDER SOLID MESHES ---
     if (bRenderSolid) {
-        pass.SetPipeline(pipeline); // Use the solid (TriangleStrip) pipeline
+      pass.SetPipeline(pipeline); // Use the solid (TriangleStrip) pipeline
+      pass.SetBindGroup(1, lodManager.getBindGroup());
 
         // Draw main instanced mesh
         pass.SetVertexBuffer(0, mesh.getVertexBuffer());
@@ -231,7 +242,7 @@ void Render() {
     // --- RENDER WIREFRAME OVERLAYS ---
     if (bRenderWireframe) {
         pass.SetPipeline(wfPipeline); // Switch to the wireframe (LineStrip) pipeline
-
+        pass.SetBindGroup(1, lodManager.getBindGroup());
         // Draw wireframe for main instanced mesh
         pass.SetVertexBuffer(0, mesh.getVertexBuffer());
         pass.SetIndexBuffer(mesh.getIndexBufferLL(), wgpu::IndexFormat::Uint32);
@@ -287,8 +298,9 @@ void InitGraphics() {
     }
     
     
-    BuildingManager buildingManager;
+    
     buildingManager.initialize(device);
+   
     try {
     // This path is for the preloaded virtual filesystem in Emscripten
     // For a native build, this would be a relative path like "data/buildings.geojson"
@@ -313,20 +325,21 @@ void InitGraphics() {
 
 
   // LAYOUT SETUP
-  wgpu::BindGroupLayoutEntry bglEntry{
+  wgpu::BindGroupLayoutEntry bgCameraEntry{
       .binding = 0,
       .visibility = wgpu::ShaderStage::Vertex,
     };
-    bglEntry.buffer.type = wgpu::BufferBindingType::Uniform;
+    bgCameraEntry.buffer.type = wgpu::BufferBindingType::Uniform;
     
-  wgpu::BindGroupLayoutDescriptor bglDesc{
+  wgpu::BindGroupLayoutDescriptor bgCameraDesc{
       .entryCount = 1,
-      .entries = &bglEntry
+      .entries = &bgCameraEntry
   };
-  wgpu::BindGroupLayout cameraBindGroupLayout = device.CreateBindGroupLayout(&bglDesc);
+  wgpu::BindGroupLayout cameraBindGroupLayout = device.CreateBindGroupLayout(&bgCameraDesc);
 
+   pipelineBuilding=buildingManager.createBuildingPipeline(format,cameraBindGroupLayout);
 
- terrainUniformBuffer = BufferUtils::createUniformBuffer(device, sizeof(terrainUniforms));
+  terrainUniformBuffer = BufferUtils::createUniformBuffer(device, sizeof(terrainUniforms));
   lodManager(device);
 
   #if defined(__EMSCRIPTEN__)
@@ -335,8 +348,8 @@ void InitGraphics() {
       "/data/elevation_lod0",
       "/data/elevation_lod1",
       "/data/elevation_lod2",
-      // "/data/elevation_lod3",
-      // "/data/elevation_lod4"
+      "/data/elevation_lod3",
+      "/data/elevation_lod4"
     };
   #else
     std::vector<std::string> lodFiles = {
@@ -358,34 +371,22 @@ void InitGraphics() {
   wgpu::PipelineLayout pipelineLayout = device.CreatePipelineLayout(&layoutDesc);
 
 
-   PipelineConfig solidConfig{};
-  solidConfig.surfaceFormat = format;
-  solidConfig.layout = pipelineLayout;
-  // Your current mesh uses TriangleStrip, so let's set it explicitly.
-  // The createIndicesT function creates a TriangleStrip.
-  solidConfig.topology = wgpu::PrimitiveTopology::TriangleStrip;
+   PipelineConfig Config{
+    .surfaceFormat = format,
+    .layout = pipelineLayout,
+    // .topology = wgpu::PrimitiveTopology::TriangleList 
+   };
 
-  try {
-      pipeline = Pipeline(device, solidConfig, shaderCode).getPipeline();
-  } catch (const std::runtime_error& e) {
-      std::cerr << "Solid Pipeline creation failed: " << e.what() << std::endl;
-      exit(1);
-  }
-
-  // --- Create the WIREFRAME pipeline ---
-  PipelineConfig wireframeConfig = solidConfig; // Start by copying the solid config
-  wireframeConfig.topology = wgpu::PrimitiveTopology::LineList; // <-- THE ONLY CHANGE!
-
-  try {
-      wfPipeline = Pipeline(device, wireframeConfig, shaderCode).getPipelineWF();
-  } catch (const std::runtime_error& e) {
-      std::cerr << "Wireframe Pipeline creation failed: " << e.what() << std::endl;
-      exit(1);
-  }
+   Pipeline pip=Pipeline(device, Config, shaderCode);
+  
+    pipeline = pip.getPipeline();
+    wfPipeline = pip.getPipelineWF();
+    pipelineTL = pip.getPipelineTL();
+ 
 
   // BUFFER SETUP
   vertexBuffer = mesh.getVertexBuffer();
-  uniformBuffer = BufferUtils::createUniformBuffer(device, sizeof(glm::mat4));
+  uniformBuffer = BufferUtils::createUniformBuffer(device, sizeof(CameraUniforms));
   // std::cout << "Size of MData: " << sizeof(MData) << " bytes" << std::endl;
   // mDataUniformBuffer = BufferUtils::createUniformBuffer(device, sizeof(MData));
   
@@ -394,7 +395,7 @@ void InitGraphics() {
   bgEntry.binding = 0; // Corresponds to @binding(0) in shader
   bgEntry.buffer = uniformBuffer;
   bgEntry.offset = 0;
-  bgEntry.size = sizeof(glm::mat4);
+  bgEntry.size = sizeof(CameraUniforms);
 
   wgpu::BindGroupDescriptor bgDesc{
     .layout = cameraBindGroupLayout,
@@ -434,9 +435,9 @@ void InitGraphics() {
     };
     
 
-    
-    float scale=1;
-    
+
+    float scale=1.0f;
+
 
     std::vector<InstanceData> instancesLOD ={
         { { mm*3+1,mm+1 }, scale, 0 , colors[8]},
@@ -457,7 +458,7 @@ void InitGraphics() {
 
 
 
-    for(i=1;i<4;i++){
+    for(i=1;i<6;i++){
       x+=mm*scale;
       xx+=mm*scale;
       if(i%2==0)
@@ -608,17 +609,17 @@ void processInput(GLFWwindow *window) {
 #else
     // Native desktop version: Use polling with glfwGetKey.
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        camera.ProcessKeyboard(CameraMovement::FORWARD, deltaTime);
+        camera.ProcessKeyboard(CameraMovement::FORWARD, 10);
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        camera.ProcessKeyboard(CameraMovement::BACKWARD, deltaTime);
+        camera.ProcessKeyboard(CameraMovement::BACKWARD, 10);
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        camera.ProcessKeyboard(CameraMovement::LEFT, deltaTime);
+        camera.ProcessKeyboard(CameraMovement::LEFT, 10);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        camera.ProcessKeyboard(CameraMovement::RIGHT, deltaTime);
+        camera.ProcessKeyboard(CameraMovement::RIGHT, 10);
     if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-        camera.ProcessKeyboard(CameraMovement::UP, deltaTime);
+        camera.ProcessKeyboard(CameraMovement::UP, 10);
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
-        camera.ProcessKeyboard(CameraMovement::DOWN, deltaTime);
+        camera.ProcessKeyboard(CameraMovement::DOWN, 10);
     if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS)
     {
         // Handle control key press

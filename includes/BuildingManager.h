@@ -57,6 +57,7 @@ public:
     wgpu::Buffer getIndexBuffer() const { return m_indexBuffer; }
     uint32_t getIndexCount() const { return m_indexCount; }
     bool isReady() const { return m_isReady; }
+    wgpu::RenderPipeline createBuildingPipeline(const wgpu::TextureFormat& format, const wgpu::BindGroupLayout& cameraBindGroupLayout);
 
 private:
     wgpu::Device m_device;
@@ -64,4 +65,6 @@ private:
     wgpu::Buffer m_indexBuffer;
     uint32_t m_indexCount = 0;
     bool m_isReady = false;
+
+    wgpu::VertexState createVertexPipelineLayout(const wgpu::ShaderModule& shaderModule, struct VertexPipelineLayoutData& layoutData);
 };

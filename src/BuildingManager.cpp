@@ -11,6 +11,9 @@
 #include <nlohmann/json.hpp>
 
 #include <mapbox/earcut.hpp>
+#include <Pipeline.h>
+
+#include <ShaderLoader.h>
 
 // --- Helper Structures and Constants for Projection ---
 
@@ -125,6 +128,51 @@ void BuildingManager::loadBuildings(const std::string& geojsonPath, double origi
     std::vector<uint32_t> indices;
     const int maxBuildingsToProcess = 5;
     int buildingsProcessed = 0;
+
+    // float w = 10.0f; // Width
+    // float h = 20.0f; // Height
+
+    // // Base Vertices (Y = 0)
+    // vertices.push_back({{ 0.0f, 0.0f, 0.0f }}); // 0: Bottom-Left
+    // vertices.push_back({{    w, 0.0f, 0.0f }}); // 1: Bottom-Right
+    // vertices.push_back({{    w, 0.0f,    w }}); // 2: Top-Right
+    // vertices.push_back({{ 0.0f, 0.0f,    w }}); // 3: Top-Left
+
+    // // Top Vertices (Y = Height)
+    // vertices.push_back({{ 0.0f,    h, 0.0f }}); // 4: Bottom-Left Top
+    // vertices.push_back({{    w,    h, 0.0f }}); // 5: Bottom-Right Top
+    // vertices.push_back({{    w,    h,    w }}); // 6: Top-Right Top
+    // vertices.push_back({{ 0.0f,    h,    w }}); // 7: Top-Left Top
+
+    // // 2. Define Indices (12 Triangles total)
+
+    // // -- Wall 1 (Front) --
+    // indices.push_back(0); indices.push_back(1); indices.push_back(5);
+    // indices.push_back(5); indices.push_back(4); indices.push_back(0);
+
+    // // -- Wall 2 (Right) --
+    // indices.push_back(1); indices.push_back(2); indices.push_back(6);
+    // indices.push_back(6); indices.push_back(5); indices.push_back(1);
+
+    // // -- Wall 3 (Back) --
+    // indices.push_back(2); indices.push_back(3); indices.push_back(7);
+    // indices.push_back(7); indices.push_back(6); indices.push_back(2);
+
+    // // -- Wall 4 (Left) --
+    // indices.push_back(3); indices.push_back(0); indices.push_back(4);
+    // indices.push_back(4); indices.push_back(7); indices.push_back(3);
+
+    // // -- Roof (Top) --
+    // indices.push_back(4); indices.push_back(5); indices.push_back(7);
+    // indices.push_back(5); indices.push_back(6); indices.push_back(7);
+
+    // // -- Floor (Optional, usually hidden) --
+    // indices.push_back(0); indices.push_back(3); indices.push_back(1);
+    // indices.push_back(3); indices.push_back(2); indices.push_back(1);
+
+    // std::cout << "Generated Dummy Static Building." << std::endl;
+
+
     for (const auto& footprint : buildingFootprints) {
          if (buildingsProcessed >= maxBuildingsToProcess) {
         break; // Exit the loop
@@ -178,6 +226,13 @@ void BuildingManager::loadBuildings(const std::string& geojsonPath, double origi
         return;
     }
 
+    // Debug: print the generated vertex positions (first 3 floats of each Vertex assumed to be XYZ)
+    // std::cout << "Dumping vertices (" << vertices.size() << "):" << std::endl;
+    // for (size_t i = 0; i < vertices.size(); ++i) {
+    //     const float* pos = reinterpret_cast<const float*>(&vertices[i]);
+    //     std::cout << "  [" << i << "] " << pos[0] << ", " << pos[1] << ", " << pos[2] << std::endl;
+    // }
+
     // --- 4. CREATE AND UPLOAD GPU BUFFERS ---
     wgpu::BufferDescriptor vertexDesc = {};
     vertexDesc.size = vertices.size() * sizeof(Vertex);
@@ -195,4 +250,110 @@ void BuildingManager::loadBuildings(const std::string& geojsonPath, double origi
     std::cout << "Successfully uploaded building meshes to GPU." << std::endl;
     std::cout << " - Vertex count: " << vertices.size() << std::endl;
     std::cout << " - Index count: " << m_indexCount << std::endl;
+}
+
+
+wgpu::RenderPipeline BuildingManager::createBuildingPipeline(const wgpu::TextureFormat& format, const wgpu::BindGroupLayout& cameraBindGroupLayout) {
+    std::string shader="shaders/buildings.wgsl";
+    std::string shaderCode;
+        try {
+            shaderCode = loadShaderSource(shader);
+        } catch (const std::runtime_error& e) {
+            std::cerr << "Fatal Error: " << e.what() << std::endl;
+            // Handle error, maybe exit or throw an exception.
+            exit(1);
+        }
+
+    // Create the shader module
+    wgpu::ShaderSourceWGSL wgsl{{.code = shaderCode.c_str()}};
+    wgpu::ShaderModuleDescriptor shaderModuleDescriptor{.nextInChain = &wgsl};
+    wgpu::ShaderModule shaderModule = m_device.CreateShaderModule(&shaderModuleDescriptor);
+
+    // Create the vertex state
+    VertexPipelineLayoutData layoutData;
+    wgpu::VertexState vertexState = createVertexPipelineLayout(shaderModule, layoutData);
+    
+
+    wgpu::ColorTargetState colorTargetState{.format = format};
+
+    wgpu::FragmentState fragmentState = {
+        .module = shaderModule,
+        .entryPoint = "fragmentMain",
+        .targetCount = 1,
+        .targets = &colorTargetState
+    };
+
+    
+    wgpu::PrimitiveState primitiveState = {
+        .topology = wgpu::PrimitiveTopology::TriangleList,
+        .stripIndexFormat = wgpu::IndexFormat::Undefined,
+        .frontFace = wgpu::FrontFace::CCW,
+        .cullMode = wgpu::CullMode::Back
+    };
+    
+    wgpu::BindGroupLayoutEntry bindGroupEntry = {
+        .binding = 0,
+        .visibility = wgpu::ShaderStage::Vertex
+    };
+    bindGroupEntry.buffer.type = wgpu::BufferBindingType::Uniform;
+    
+    wgpu::BindGroupLayoutDescriptor bindGroupDesc = {
+        .entryCount = 1,
+        .entries = &bindGroupEntry
+    };
+
+    wgpu::BindGroupLayout bindGroupLayout = cameraBindGroupLayout;
+
+    wgpu::PipelineLayoutDescriptor layoutDesc = {};
+    layoutDesc.bindGroupLayoutCount = 1;
+    layoutDesc.bindGroupLayouts = &bindGroupLayout;
+    
+    wgpu::PipelineLayout pipelineLayout= m_device.CreatePipelineLayout(&layoutDesc);
+    
+    
+    wgpu::RenderPipelineDescriptor pipelineDescriptor = {
+        .layout = pipelineLayout,
+        .vertex = vertexState,
+        .primitive = primitiveState,
+        .fragment = &fragmentState
+    };
+    
+
+    // Create the render pipeline
+    return m_device.CreateRenderPipeline(&pipelineDescriptor);
+}
+
+
+
+wgpu::VertexState BuildingManager::createVertexPipelineLayout(
+    const wgpu::ShaderModule& shaderModule,
+    VertexPipelineLayoutData& layoutData
+) {
+    // --- Mesh vertex buffer (location 0) ---
+    layoutData.vertexAttributes[0] = {
+        .format = wgpu::VertexFormat::Float32x3, // position
+        .offset = 0,
+        .shaderLocation = 0
+    };
+
+    // FIX: Reordered initializers to match declaration order
+    layoutData.vertexBufferLayout = {
+        .stepMode = wgpu::VertexStepMode::Vertex,
+        .arrayStride = sizeof(Vertex), 
+        .attributeCount = 1,
+        .attributes = layoutData.vertexAttributes
+    };
+
+
+    // --- VertexState with two buffers ---
+    static wgpu::VertexBufferLayout buffers[1] = { layoutData.vertexBufferLayout };
+
+    wgpu::VertexState vertexState{
+        .module = shaderModule,
+        .entryPoint = "vertexMain",
+        .bufferCount = 1,
+        .buffers = buffers
+    };
+
+    return vertexState;
 }

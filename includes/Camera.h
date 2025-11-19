@@ -3,6 +3,12 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+struct CameraUniforms {
+    glm::mat4 viewProj;
+    glm::vec4 worldPos; // w is padding
+};
+
+
 // Defines several possible options for camera movement. Used as abstraction to stay away from window-system specific input methods
 enum class CameraMovement {
     FORWARD,

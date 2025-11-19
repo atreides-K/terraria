@@ -28,7 +28,7 @@ Pipeline::Pipeline(
     };
 
     wgpu::PrimitiveState primitiveState{
-        .topology = config.topology,
+        .topology = wgpu::PrimitiveTopology::TriangleStrip,
         .stripIndexFormat = config.indexFormat,
         .frontFace = wgpu::FrontFace::CCW,
         .cullMode = wgpu::CullMode::None
@@ -45,9 +45,8 @@ Pipeline::Pipeline(
     m_pipeline = device.CreateRenderPipeline(&descriptor);
 
     wgpu::PrimitiveState primitiveStateWF{
-        .topology = config.topology,
+        .topology = wgpu::PrimitiveTopology::LineList,
         .frontFace = wgpu::FrontFace::CCW,
-        
         .cullMode = wgpu::CullMode::None
     };
     wgpu::RenderPipelineDescriptor descriptorWF{
@@ -57,6 +56,21 @@ Pipeline::Pipeline(
         .fragment = &fragmentState
     };
     m_pipelineWF = device.CreateRenderPipeline(&descriptorWF);
+ 
+    wgpu::PrimitiveState primitiveStateTL{
+        .topology = wgpu::PrimitiveTopology::TriangleList,
+        .frontFace = wgpu::FrontFace::CCW,
+        
+        .cullMode = wgpu::CullMode::None
+    };
+    wgpu::RenderPipelineDescriptor descriptorTL{
+        .layout = config.layout,
+        .vertex = vertexState,
+        .primitive = primitiveStateTL,
+        .fragment = &fragmentState
+    };
+    m_pipelineTL = device.CreateRenderPipeline(&descriptorTL);
+
 
 }
 
@@ -117,5 +131,8 @@ wgpu::RenderPipeline Pipeline::getPipeline() const{
 
 wgpu::RenderPipeline Pipeline::getPipelineWF() const{
     return m_pipelineWF;
+}
 
+wgpu::RenderPipeline Pipeline::getPipelineTL() const{
+    return m_pipelineTL;
 }

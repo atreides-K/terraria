@@ -36,11 +36,12 @@ class Pipeline
         
         wgpu::RenderPipeline getPipeline() const;
         wgpu::RenderPipeline getPipelineWF() const;
-
+        wgpu::RenderPipeline getPipelineTL() const;
         wgpu::VertexState createVertexPipelineLayout(const wgpu::ShaderModule& shaderModule, VertexPipelineLayoutData& layoutData);
         
 
     private:
         wgpu::RenderPipeline m_pipeline;
         wgpu::RenderPipeline m_pipelineWF;
+        wgpu::RenderPipeline m_pipelineTL;
 };

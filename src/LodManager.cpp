@@ -19,12 +19,13 @@ void LODManager::loadLODs(const std::vector<std::string>& baseFilenames, wgpu::B
     DEMLoader firstLoader(lod0_raw, lod0_hdr);
     const uint32_t masterWidth = firstLoader.getWidth();
     const uint32_t masterHeight = firstLoader.getHeight();
+    std::cout << "Master LOD dimensions: " << masterWidth << "x" << masterHeight << std::endl;
     const uint32_t layerCount = baseFilenames.size();
 
     terrainUniforms uniformsData = {
         .heightScale = 1.0f, // Set as needed
-        .terrainWidth = static_cast<float>(masterWidth),
-        .terrainHeight = static_cast<float>(masterHeight)
+        .terrainWidth = static_cast<float>(masterWidth)*30.0f,
+        .terrainHeight = static_cast<float>(masterHeight)*30.0f    
     };
     // Update the terrain uniform buffer with the new data
     m_device.GetQueue().WriteBuffer(
