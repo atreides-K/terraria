@@ -69,8 +69,8 @@ void BuildingManager::loadBuildings(const std::string& geojsonPath, double origi
     // --- 1. SETUP COORDINATE PROJECTION ---
     // Calculate the crucial scaling factors: how many meters one degree represents at our origin's latitude.
     double latRad = originLat * PI / 180.0;
-    const double metersPerDegreeLon = (PI * EARTH_RADIUS_METERS * std::cos(latRad)) / 180.0;
-    const double metersPerDegreeLat = (2.0 * PI * EARTH_RADIUS_METERS) / 360.0; // This is roughly constant.
+    const double metersPerDegreeLon = (PI * EARTH_RADIUS_METERS * std::cos(latRad)) / (180.0 );
+    const double metersPerDegreeLat = (2.0 * PI * EARTH_RADIUS_METERS) / (360.0 );
 
     std::cout << "Building projection initialized:" << std::endl;
     std::cout << " - Origin: " << originLon << ", " << originLat << std::endl;
@@ -87,15 +87,15 @@ void BuildingManager::loadBuildings(const std::string& geojsonPath, double origi
     std::vector<std::vector<Point>> buildingFootprints; // Stores the *projected* footprints in meters
 
     if (data.contains("features")) {
-        const int maxBuildingsToProcess = 5;
+        // const int maxBuildingsToProcess = INT_MAX;
         int buildingsProcessed = 0;
         for (const auto& feature : data["features"]) {
             const auto& geometry = feature["geometry"];
             if (geometry["type"] == "Polygon") {
                 std::vector<Point> projectedFootprint;
-                    if (buildingsProcessed >= maxBuildingsToProcess) {
-                    break; // Exit the loop
-                }
+                //     if (buildingsProcessed >= maxBuildingsToProcess) {
+                //     break; // Exit the loop
+                // }
                 buildingsProcessed++;
                 std::cout << "Processing a building footprint..." << std::endl;
                 // For a polygon, the first array of coordinates is the outer ring. We ignore inner holes for simplicity.
@@ -174,9 +174,9 @@ void BuildingManager::loadBuildings(const std::string& geojsonPath, double origi
 
 
     for (const auto& footprint : buildingFootprints) {
-         if (buildingsProcessed >= maxBuildingsToProcess) {
-        break; // Exit the loop
-    }
+    //      if (buildingsProcessed >= maxBuildingsToProcess) {
+    //     break; // Exit the loop
+    // }
     buildingsProcessed++;
         if (footprint.size() < 3) continue; // Skip invalid polygons
 
@@ -275,6 +275,12 @@ wgpu::RenderPipeline BuildingManager::createBuildingPipeline(const wgpu::Texture
     
 
     wgpu::ColorTargetState colorTargetState{.format = format};
+    
+     wgpu::DepthStencilState depthStencilState = {
+    .format = wgpu::TextureFormat::Depth24Plus, // Must match the texture created in main loop
+    .depthWriteEnabled = true,                  // "Write my distance to the buffer"
+    .depthCompare = wgpu::CompareFunction::Less,// "Only draw me if I am closer than what's already there"
+    };
 
     wgpu::FragmentState fragmentState = {
         .module = shaderModule,
@@ -287,8 +293,8 @@ wgpu::RenderPipeline BuildingManager::createBuildingPipeline(const wgpu::Texture
     wgpu::PrimitiveState primitiveState = {
         .topology = wgpu::PrimitiveTopology::TriangleList,
         .stripIndexFormat = wgpu::IndexFormat::Undefined,
-        .frontFace = wgpu::FrontFace::CCW,
-        .cullMode = wgpu::CullMode::Back
+        .frontFace = wgpu::FrontFace::CW,
+        .cullMode = wgpu::CullMode::None
     };
     
     wgpu::BindGroupLayoutEntry bindGroupEntry = {
@@ -315,6 +321,7 @@ wgpu::RenderPipeline BuildingManager::createBuildingPipeline(const wgpu::Texture
         .layout = pipelineLayout,
         .vertex = vertexState,
         .primitive = primitiveState,
+        .depthStencil = &depthStencilState,
         .fragment = &fragmentState
     };
     

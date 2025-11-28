@@ -21,6 +21,12 @@ Pipeline::Pipeline(
 
     wgpu::ColorTargetState colorTargetState{.format = config.surfaceFormat}; // Use the passed-in format
     
+    wgpu::DepthStencilState depthStencilState = {
+    .format = wgpu::TextureFormat::Depth24Plus, // Must match the texture created in main loop
+    .depthWriteEnabled = true,                  // "Write my distance to the buffer"
+    .depthCompare = wgpu::CompareFunction::Less,// "Only draw me if I am closer than what's already there"
+    };
+
     wgpu::FragmentState fragmentState{
         .module = shaderModule, 
         .targetCount = 1, 
@@ -40,7 +46,8 @@ Pipeline::Pipeline(
         .layout = config.layout,
         .vertex = vertexState,
         .primitive = primitiveState,
-        .fragment = &fragmentState
+        .depthStencil = &depthStencilState,
+        .fragment = &fragmentState,
     };
     m_pipeline = device.CreateRenderPipeline(&descriptor);
 
@@ -53,6 +60,7 @@ Pipeline::Pipeline(
         .layout = config.layout,
         .vertex = vertexState,
         .primitive = primitiveStateWF,
+        .depthStencil = &depthStencilState,
         .fragment = &fragmentState
     };
     m_pipelineWF = device.CreateRenderPipeline(&descriptorWF);
@@ -67,6 +75,7 @@ Pipeline::Pipeline(
         .layout = config.layout,
         .vertex = vertexState,
         .primitive = primitiveStateTL,
+        .depthStencil = &depthStencilState,
         .fragment = &fragmentState
     };
     m_pipelineTL = device.CreateRenderPipeline(&descriptorTL);

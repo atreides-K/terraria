@@ -178,7 +178,20 @@ void Render() {
 
     // IMPORTANT: For wireframe-on-solid, you need a depth buffer.
     // This is a minimal setup. You would need to create the depthTextureView elsewhere.
-    
+    // 1. Create the Depth Texture (Do this once, or when window resizes)
+      wgpu::TextureDescriptor depthDesc;
+      depthDesc.size = { kWidth, kHeight, 1 };
+      depthDesc.format = wgpu::TextureFormat::Depth24Plus; // Must match pipeline!
+      depthDesc.usage = wgpu::TextureUsage::RenderAttachment;
+      wgpu::Texture depthTexture = device.CreateTexture(&depthDesc);
+
+      // 2. Setup the Attachment
+      wgpu::RenderPassDepthStencilAttachment depthAttachment;
+      depthAttachment.view = depthTexture.CreateView();
+      depthAttachment.depthClearValue = 1.0f; // 1.0 = "Far away"
+      depthAttachment.depthLoadOp = wgpu::LoadOp::Clear; // Clear previous frame's depth
+      depthAttachment.depthStoreOp = wgpu::StoreOp::Store;
+
     // wgpu::RenderPassDepthStencilAttachment depthAttachment {
     //     .view = depthTextureView, // You need to create this texture and view
     //     .depthLoadOp = wgpu::LoadOp::Clear,
@@ -189,7 +202,7 @@ void Render() {
     wgpu::RenderPassDescriptor passDesc{
         .colorAttachmentCount = 1,
         .colorAttachments = &attachment,
-        //.depthStencilAttachment = &depthAttachment // Uncomment when depth buffer is ready
+        .depthStencilAttachment = &depthAttachment // Uncomment when depth buffer is ready
     };
 
     wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
