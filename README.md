@@ -4,23 +4,33 @@
 ## To Dos
 ### Part I (Clipmap)
 - [x] make a badass triangle
-- [x] ez one stop cmake setup
-- [x] refactoring main
+- [ ] ez one stop cmake setup
+- [ ] refactoring main
 - [x] camera view
 - [x] DEM loader
 - [x] render basic terrain(flat)
 - [x] wireframe use line list cause linestrip cause weird end to start row lines
-- [ ] toroidal*
-- [ ] camera movement fix
+- [x] proper height field scaled wrt to mesh
+- [x] camera movement fix
+- [x] lighting
+- [ ] toroidal updates*
 - [ ] minimap *
 - [ ] workout camera centered 
-- [ ] proper height field scaled wrt to mesh
+- [ ] elevation based lod
 
 ### Part II(Urban vectors)
-- [ ] download osm vector data
-- [ ] load vector to gpu(different formats so need to look into it)
+- [x] load vector to gpu(different formats so need to look into it)(created meshes using earcuts)
+- [x] download osm vector data(building)
+    - [x] building
+    - [ ] road
+- [x] buildings to terrain
+    - [x] render building
+    - [ ] conform to terrain using height map(cpu side)
+- [ ] lighting
+    - [x] building
 - [ ] road to terrain
-- [ ] buildings to terrain
+- [ ] distance cull
+- [ ] 
 
 ### Presentation
 - [x] make paper presentation slide template
