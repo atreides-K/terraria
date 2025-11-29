@@ -214,7 +214,7 @@ void InitGraphics() {
   // LAYOUT SETUP
   wgpu::BindGroupLayoutEntry bglEntry{
       .binding = 0,
-      .visibility = wgpu::ShaderStage::Vertex,
+      .visibility = wgpu::ShaderStage::Vertex| wgpu::ShaderStage::Fragment,
       .buffer.type = wgpu::BufferBindingType::Uniform,
   };
  

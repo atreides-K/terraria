@@ -340,7 +340,7 @@ void InitGraphics() {
   // LAYOUT SETUP
   wgpu::BindGroupLayoutEntry bgCameraEntry{
       .binding = 0,
-      .visibility = wgpu::ShaderStage::Vertex,
+      .visibility = wgpu::ShaderStage::Vertex|wgpu::ShaderStage::Fragment,
     };
     bgCameraEntry.buffer.type = wgpu::BufferBindingType::Uniform;
     

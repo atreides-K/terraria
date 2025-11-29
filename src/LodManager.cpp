@@ -87,16 +87,16 @@ void LODManager::loadLODs(const std::vector<std::string>& baseFilenames, wgpu::B
     // Define the layout the shader expects for this bind group
     wgpu::BindGroupLayoutEntry bglEntries[3] = {};
     bglEntries[0].binding = 0;
-    bglEntries[0].visibility = wgpu::ShaderStage::Vertex; // Or Vertex, if you use it there
+    bglEntries[0].visibility = wgpu::ShaderStage::Vertex|wgpu::ShaderStage::Fragment; // Or Vertex, if you use it there
     bglEntries[0].texture.sampleType = wgpu::TextureSampleType::UnfilterableFloat;
     bglEntries[0].texture.viewDimension = wgpu::TextureViewDimension::e2DArray; // CRITICAL
 
     bglEntries[1].binding = 1;
-    bglEntries[1].visibility = wgpu::ShaderStage::Vertex; // Or Vertex
+    bglEntries[1].visibility = wgpu::ShaderStage::Vertex|wgpu::ShaderStage::Fragment; // Or Vertex
     bglEntries[1].sampler.type = wgpu::SamplerBindingType::NonFiltering;
 
     bglEntries[2].binding = 2;
-    bglEntries[2].visibility = wgpu::ShaderStage::Vertex;
+    bglEntries[2].visibility = wgpu::ShaderStage::Vertex|wgpu::ShaderStage::Fragment; // Or Vertex
     bglEntries[2].buffer.type = wgpu::BufferBindingType::Uniform;
 
     wgpu::BindGroupLayoutDescriptor bglDesc = { .entryCount = 3, .entries = bglEntries };
